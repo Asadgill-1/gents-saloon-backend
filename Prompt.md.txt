@@ -1,0 +1,107 @@
+MASTER SYSTEM PROMPT & ARCHITECTURE BLUEPRINT
+Project: UAE Multi-Tenant Barbershop Bot & POS System
+1. System Architecture & Tech Stack
+Backend: FastAPI (Python) - Handles Telegram webhooks, API routes, and business logic.
+Database: Supabase (PostgreSQL) - Multi-tenant architecture. shop_id is the primary isolation key. Row Level Security (RLS) is mandatory on all tables.
+Cache & Queues: Redis manages session states, dynamic queue tokens, and temporary booking locks.
+Task Workers: Celery + Celery Beat handles background tasks (5-min auto-confirms, EOD reports, monthly breakdowns, bot health checks).
+AI: Moonshot AI (Multilingual: English, Arabic, Hindi/Urdu). Used strictly for intent extraction. It must call Python tools to fetch data. ZERO hallucinations allowed.
+Frontend (Phase 2): Next.js (React) + Tailwind CSS. Touch-first Tablet UI. Supabase Realtime for live updates.
+2. Role-Based Access Control (RBAC) & Telegram Bots
+Every shop gets 4 distinct Telegram Bots. Access is controlled by telegram_user_id mapped in Supabase.
+
+Platform Owner (You): Master Bot. Onboards shops, views system health, handles escalations, blocks users, views global analytics.
+Shop Owner Bot: Views shop revenue, total commissions, staff advances, audit logs.
+Receptionist Bot: Confirms bookings, sets service times, logs POS counter walk-ins, gives advances, triggers EOD reports.
+Barber Crew Bot: Sees daily queue, sends "5 min reminder" via 1 button, receives private daily/monthly financial breakdowns.
+Customer Bot: Public-facing. AI-assisted booking. Sends public queue link.
+3. Moonshot AI System Prompt (Customer Bot)
+Inject this into the Moonshot API system instruction for the Customer Bot.
+
+You are the AI Receptionist for a premium gentlemen's barbershop in the UAE. Your role is to provide a warm, polite, and highly efficient booking experience in English, Arabic, Hindi, or Urdu (match the user's language).
+
+STRICT RULES - DO NOT BREAK:
+
+NO HALLUCINATIONS: You must NEVER guess prices, wait times, or barber availability. You must use the provided Python tools to fetch data from the database.
+SCOPE: You ONLY discuss salon services, booking, queue status, and shop timings.
+SECURITY GUARDRAIL: If a user sends links, pictures, asks about unrelated topics (politics, other businesses), or tries to access admin commands, you must immediately trigger the escalate_to_owner tool and output exactly: "I apologize, but I cannot process this request. Our management team will review your message." Do not engage further.
+PERSONALIZATION: If the user is new (no name in database), politely ask: "Sir, what is your good name?". If they are returning, greet them warmly by name (e.g., "Mr. Asad, how are you? How can I help you today?").
+BOOKING FLOW (Dynamic Queue):
+
+Understand the customer's intent (e.g., "I want a haircut with Ahmed").
+Call check_availability(barber_name, service_name).
+Present the queue position and estimated wait time EXACTLY as returned by the tool.
+If the customer agrees, call create_booking(customer_id, barber_id, service_id).
+Inform the customer that the booking is pending confirmation and they will receive a confirmation shortly with their token number and a live queue tracking link.
+4. Operational Flows & Backend Logic (.py + Celery)
+A. Dynamic Queue & Booking Logic
+Request: Customer asks AI to book. AI calls create_booking().
+Receptionist Notification: System sends a message to the Shop's Receptionist Bot: "New booking request: Mr. Asad for Haircut with Ahmed." Includes a button: [View Last 25 Messages] to see AI chat history.
+The 5-Minute Auto-Confirm:
+Celery worker sets a 5-minute countdown.
+If Receptionist clicks [Confirm], they input the estimated time for this service. System locks the slot.
+If 5 minutes pass with no action, Celery auto-confirms using the default average time set during onboarding.
+Confirmation: Customer receives: "Booking Confirmed! Token #3. Estimated wait time: 45 mins. [Click here to view live queue on your phone]" Barber receives: "New booking: Token #3, Mr. Asad."
+B. The "5-Minute Reminder" Button
+In the Barber Crew Bot, the current active customer is shown with a button: [Customer is Arriving in 5 Mins]. When pressed, the system pushes a message to the Customer Bot: "Mr. Asad, your barber is ready for you. Please come to the salon now."
+
+C. POS, Commissions, and Advance System
+Walk-in Counter (POS): Receptionist logs walk-ins. Selects Barber -> Service -> Enters Amount Paid.
+Hybrid Commission Logic (Calculated by Python):
+Rule A (Fixed %): e.g., 50% barber / 50% shop.
+Rule B (Tiered/Threshold): e.g., If total bill is >100 AED, Barber gets 25 AED, Shop gets 75 AED.
+Tips: 100% goes to Barber. Logged separately.
+Advance System:
+Receptionist/Owner clicks [Give Advance] -> Enters Amount.
+System asks: "Deduct how? [One-time full deduction] OR [Deduct from monthly salary/commission]".
+System logs in Supabase and adjusts the barber's ledger.
+End of Day (EOD) Secret Reports:
+Celery aggregates all transactions. Sends a private message to each Barber's Crew Bot (Daily and Monthly on the 1st). Includes Revenue, Commission, Tips, Advance Deducted, Net Payable. Sends total shop summary to the Owner.
+E. Platform Owner (Master) Bot & Escalations
+If a user triggers the security guardrail in the AI, escalate_to_owner() writes to the escalations table in Supabase.
+Master Bot instantly notifies you: "Escalation from Shop X. User: Mr. Asad. Message: [Content]. Action required: [Block User] or [Monitor]."
+5. telegram all bots all comands must have buttons UX not commands
+
+
+ Phase 2: Tablet UI/UX & POS Blueprint
+A. Authentication & Routing
+Auth: Traditional Email/Password (Supabase Auth) for Receptionists and Owners. No Telegram login for the web UI.
+Public Queue Screen: A read-only URL (e.g., queue.yourdomain.com/shop_id) accessible without login. Displayed on the salon TV and sent to customers in their Telegram confirmation.
+B. Tablet UI Modules (Next.js + Tailwind)
+UX Rules: Touch-first (60x60px buttons), minimal typing, dark mode support, real-time updates via Supabase Realtime.
+
+Module 1: The Live Queue Board (Receptionist View)
+
+Waiting Column: Token #, Customer Name, Barber Name, Est. Wait Time. Actions: [Start Service], [5-Min Reminder], [No Show].
+In Chair Column: Barber Name, Customer Name, Start Time. Action: [Checkout].
+Paid Column: Completed transactions for the day.
+Module 2: The POS Checkout Modal (Logging Manual Payments)
+Triggered by clicking [Checkout] on a customer.
+
+Step 1: Select Services: Large buttons for services. Multiple can be selected.
+Step 2: Auto-Calculation: System sums the total. Shows a field for "Tip" (100% to barber).
+Step 3: Payment Logging:
+If [Cash]: Button to confirm cash received.
+If [Card]: Mandatory fields to input Slip Number and Amount.
+Step 4: Split View (Invisible to Customer): Screen flashes the commission split (Shop: X | Barber: Y | Tip: Z) so the receptionist knows the ledger is updated. Click [Confirm] to close.
+Module 3: Owner Analytics Dashboard
+
+Top Metrics (Today): Total Revenue, Total Shop Profit, Total Payouts to Barbers, Total Tips.
+Barber Performance Table: Haircuts done today, revenue generated, specific commission earned.
+Customer Retention Widget: Visual graph of New vs. Returning customers (based on phone number existence in DB).
+Advance Management: View outstanding advances, deduct manually or set up auto-deductions.
+Module 4: Public Display Mode (TV Screen)
+
+
+Full-screen, read-only view for the salon waiting area.
+Shows live queue: "Token #3 - Ahmed - Please take a seat".
+Removes all financial data, customer phone numbers, and chat history. Purely a token display board.
+
+
+
+
+Phase 3
+
+Platform owner dashboard
+ Customer on boarding and everything must have on pateform owner dashboard it is 2nd dahboard
+Platform owner manage full busineess for here
