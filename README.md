@@ -9,7 +9,7 @@ Multi-tenant platform for gents barbershops: 4 Telegram bots per shop + global M
 Read in this order, then start executing:
 
 1. [CLAUDE.md](CLAUDE.md) — coding rules for this repo (mandatory)
-2. [docs/SECURITY.md](docs/SECURITY.md) — binding security rules S1–S9 (mandatory before any code)
+2. [docs/SECURITY.md](docs/SECURITY.md) — binding security rules S1–S11 (mandatory before any code)
 3. [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) — history + decision log
 4. [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md) — system overview, locked decisions, phase index, conventions, definitions of done
 5. The phase you're executing: [docs/phases/](docs/phases/) — **next up: [PHASE_0_FOUNDATIONS.md](docs/phases/PHASE_0_FOUNDATIONS.md)**

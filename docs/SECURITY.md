@@ -2,6 +2,8 @@
 
 **Status: MANDATORY. Not advice.** Every LLM session working in any of the 3 repos reads this before writing code. A change that violates a rule here is rejected regardless of who asked for it — convenience, speed, or "it's just a demo" never override. CLAUDE.md's "Never simplify away" list includes this entire file.
 
+Sections: **S1** secrets · **S2** Supabase/RLS · **S3** backend · **S4** bots · **S5** AI layer · **S6** money · **S7** frontend/Next.js · **S8** supply chain · **S9** process · **S10** advanced attack classes (IDOR, races, escalation) · **S11** vibe-coding guardrails (AI behavior rules — the owner does not code).
+
 Why this exists: 2025–2026 research shows AI-generated code ships vulnerabilities at extreme rates — XSS in ~86% of tested samples, log injection in ~88%, SSRF introduced by every major coding agent in one Dec-2025 study, ~62% of AI code with at least one flaw, 35+ CVEs from AI-generated code in March 2026 alone, 170+ Supabase apps breached via missing RLS (CVE-2025-48757), and ~19.7% of AI-recommended packages being hallucinated (slopsquatting). This project handles money, PII, and multi-tenant data. Every class below has burned real vibe-coded apps; each rule closes one.
 
 Rule IDs (S1.1 …) are stable — reference them in PRs and reviews. `VERIFY:` lines are runnable checks; a rule without its verify green is not satisfied.
@@ -33,6 +35,8 @@ Rule IDs (S1.1 …) are stable — reference them in PRs and reviews. `VERIFY:` 
 - **S2.6** Storage buckets (if ever added): private by default, signed URLs only, no public buckets without an owner decision logged in PROJECT_CONTEXT.
 - **S2.7** Run Supabase advisors (`get_advisors` MCP / dashboard Security Advisor) after every migration batch; fix or explicitly accept each finding in the phase completion note.
 - **S2.8** DB content is untrusted input when it reaches an LLM prompt or a rendered page (a hostile customer name is both a stored-XSS and a prompt-injection payload — see S5.4, S7.3).
+- **S2.9** No fake policies. `USING (true)` or "any authenticated user" policies on tenant data are RLS theater — documented as the pattern behind CVE-2025-48757-class breaches (AI tools generate them to "make it work"). Every policy must express real ownership: shop match + role, per the DATA_MODEL §4 matrix.
+  VERIFY: `grep -rn "USING (true)\|USING(true)" supabase/migrations/` → hits allowed only on genuinely public reference data (currently: none exists → zero hits).
 
 ## S3 — Backend (FastAPI / Celery / Redis)
 
@@ -47,6 +51,14 @@ Rule IDs (S1.1 …) are stable — reference them in PRs and reviews. `VERIFY:` 
 - **S3.7** Webhook auth: per-bot secret path + `X-Telegram-Bot-Api-Secret-Token` header compared constant-time (`hmac.compare_digest`). Wrong secret → 403, no detail, no logging of the attempted secret.
 - **S3.8** Celery: tasks take IDs, never rich objects (no pickle serialization — JSON serializer enforced in `celery_app.py`); every task re-validates preconditions from DB (idempotency = also a security property against replay).
 - **S3.9** CORS: exact-origin allowlist (the two Vercel domains + localhost dev). Never `*`, never reflecting the request Origin.
+- **S3.10** Mass assignment: every write endpoint uses an explicit pydantic DTO listing exactly the client-settable fields. Never spread a request body into a DB update, never accept `role`, `shop_id`, `is_blocked`, `price`, `status`, `amount` from a client unless that endpoint's contract explicitly owns that field. AI code loves `Model(**payload)` — that pattern is banned on trust-boundary input.
+- **S3.11** JWT handling: always verify signature + expiry + audience with the library's verifying API. `decode(..., options={"verify_signature": False})`, accepting `alg: none`, or trusting an unverified decode "just to read the user id" — banned. One shared `verify_supabase_jwt()` helper; no endpoint rolls its own.
+- **S3.12** DoS caps: every list endpoint has a hard `limit` ceiling (≤100) and pagination; every free-text input has a max length (names 100, notes 500, chat 4096); webhook body size capped by server config. Unbounded queries and unbounded strings are bugs.
+- **S3.13** FastAPI `/docs`, `/redoc`, `/openapi.json` disabled when `ENV=prod` (`docs_url=None`) — API surface is not advertised to attackers.
+- **S3.14** Randomness for anything security-relevant (webhook secrets, invite links, temp codes) comes from `secrets` module — never `random`, never timestamps, never uuid1.
+- **S3.15** Redis is never exposed: binds to the internal Docker network only, no published port in prod compose, password set. An open Redis = full FSM/session/lock takeover.
+  VERIFY: `docker compose config` shows no `ports:` on redis; `redis-cli -h <vps-ip>` from outside times out.
+- **S3.16** Replay defense: Telegram `update_id` deduped per bot (Redis SETNX, 24h TTL) — a replayed webhook body must be a no-op even if the secret leaks.
 
 ## S4 — Telegram bots
 
@@ -86,6 +98,11 @@ Rule IDs (S1.1 …) are stable — reference them in PRs and reviews. `VERIFY:` 
 - **S7.5** No PII in URLs: routes carry ids/slugs only; the public queue page shows first names + tokens, nothing else (enforced at the RPC — UI must not add fields).
 - **S7.6** Auth pages: no user-enumeration oracles (login error = one generic message), Supabase default rate limits left on, password reset flows use Supabase's, never custom.
 - **S7.7** Vercel: env vars set per-project in dashboard, preview deployments get dev/staging Supabase keys — never prod service keys (Vercel never holds service_role at all, per S1.2).
+- **S7.8** **Middleware is routing, not auth** (CVE-2025-29927: the `x-middleware-subrequest` header let attackers skip Next.js middleware entirely — CVSS 9.1, all majors < 12.3.5/13.5.9/14.2.25/15.2.3). Rules: (a) always install a patched Next.js and keep it current (**VERIFY AT BUILD TIME**: `npm audit` clean on `next`); (b) even patched, every protected page/layout/route handler re-verifies the session server-side itself — middleware-only auth is banned. Vercel hosting mitigates this CVE, the rule still stands (defense in depth + future CVEs).
+- **S7.9** Server Actions and `/api` route handlers are public HTTP endpoints — each one auth-checks + role-checks itself, first line, no exceptions. "Only our button calls it" is not a thing; attackers call endpoints directly.
+- **S7.10** Client-side route guards are UX, never security. Hiding a nav link, redirecting in `useEffect`, or checking role in React state protects nothing — the server-side check (S7.2/S7.9) is the only real gate.
+- **S7.11** Sessions live in httpOnly cookies via `@supabase/ssr` helpers only. Never move tokens into `localStorage`/`sessionStorage` (XSS-stealable), never hand-roll cookie code.
+- **S7.12** No open redirects: any `?next=`/`?redirect=` param is validated against a relative-path allowlist (`^/[a-z]`), never a full URL.
 
 ## S8 — Dependencies & slopsquatting (supply chain)
 
@@ -103,6 +120,30 @@ Rule IDs (S1.1 …) are stable — reference them in PRs and reviews. `VERIFY:` 
 - **S9.4** Incident basics (pre-written so nobody improvises at 2am): suspected key leak → rotate (S1.6) → check audit_log + Supabase logs for abuse window → notify owner → post-mortem note in PROJECT_CONTEXT. Suspected data exposure → disable anon RPC + suspend affected shop first, investigate second.
 - **S9.5** This file is canonical in `gents-saloon-backend/docs/SECURITY.md`; dashboard repos carry synced copies. Update canonical first, sync copies in the same change. New flaw classes get new rules with the date noted.
 
+## S10 — Advanced attack classes (the ones "working" apps still fail)
+
+- **S10.1** IDOR/BOLA (OWASP API #1): possessing an ID is not authorization. Every endpoint/tool/handler that takes an entity id re-checks ownership at execution time: booking→this shop, transaction→this shop, staff→this shop+active, customer→this shop. Sequential-looking or guessable IDs are irrelevant — we use UUIDs AND check ownership; UUID secrecy alone is banned as an auth mechanism.
+  VERIFY: automated test per web endpoint: valid JWT of shop-1 + entity id of shop-2 → 403/404, never 200.
+- **S10.2** Race conditions / TOCTOU on money and bookings: any read-then-write sequence that decides money or slot ownership runs inside one DB transaction plus the specified Redis lock (`lock:booking`, `lock:barber`), with the DB unique constraint as final referee. Known hot paths: double-checkout of one booking, double-confirm, two advances double-spending a balance, same appointment slot won twice, token collision. Every one has a concurrency pytest (two parallel calls → exactly one succeeds).
+- **S10.3** File uploads (none exist today; rule pre-set for when logos/receipts arrive): allowlist extensions + MIME sniff (not filename trust), size cap, randomized stored name, private bucket + signed URLs, never serve from the upload path, never execute.
+- **S10.4** Path traversal: no filesystem path is ever built from user input. Anything resembling `open(base + user_value)` is banned; static serving is the frontend's/Caddy's job.
+- **S10.5** Privilege escalation via metadata: roles/permissions live only in server-set `app_metadata` (S7.2) and `staff.role` — endpoints never read role from request bodies, query params, or client-writable `user_metadata`. Role changes are owner/platform-admin actions, audited (S6.5).
+- **S10.6** Idempotency as defense: money/booking mutations accept an idempotency key (booking id, txn id) so retries/replays (network flaps, double-taps, replayed webhooks S3.16) cannot double-charge or double-book — same guarantee the Celery latches give reports.
+- **S10.7** Timing/enumeration oracles: secret compares constant-time (S3.7), login errors uniform (S7.6), staff-bot silence for strangers (S4.1), admin 404-not-403 (Phase 3) — never "helpful" errors that confirm a target exists.
+
+## S11 — Vibe-coding guardrails (binding on every AI session; the owner does not code)
+
+The owner builds this entire system through AI. These rules bind the AI's *behavior*, because research documents AI assistants doing each of these when stuck:
+
+- **S11.1** **Never disable security to make something work.** When a query fails, documented AI behavior is suggesting: disable RLS, comment out the auth check, widen CORS to `*`, use service_role in the client, make the bucket public. All banned. Blocked by a security control → the control stays, fix the policy/query/flow, or stop and report the blocker to the owner in plain language.
+- **S11.2** **Never game tests.** No deleting/skipping a failing test to go green, no weakening asserts, no hardcoding expected values into mocks (documented case: agent hardcoded $0.00 into a payment mock to pass). A failing security/money test means the CODE is wrong until proven otherwise. Removing any test requires the owner's explicit OK, stated in the commit message.
+- **S11.3** **"Should work" is banned — run it and show it.** The owner cannot read code, so the proof is execution: every task ends with its VERIFY/pytest actually run and the real output shown. If verification cannot be run, the task is not done, say exactly that.
+- **S11.4** **Secrets never travel through chat.** The AI never asks the owner to paste keys/tokens into the conversation; it instructs where to put them (`.env`, Vercel settings, password manager) and references names only. If the owner accidentally pastes a secret into chat: treat as leaked → rotate per S1.6.
+- **S11.5** **Self-review the diff against this file before every commit.** One pass, checklist mindset: secrets (S1.1)? new table → RLS (S2.1)? new endpoint → auth+ownership (S7.9/S10.1)? new dep → S8.1 verification stated? touched money → tests still meaningful (S11.2)? Then commit, and name the relevant S-rules in the message when security-adjacent.
+- **S11.6** **No "temporary" bypasses.** In vibe coding, temporary is permanent — nobody comes back. A bypass that would violate an S-rule doesn't get written even with a TODO on it. If genuinely stuck: stop, write the blocker into the phase note, tell the owner.
+- **S11.7** **Refactors must not shed security.** AI refactors silently drop validation lines, auth decorators, and error handling. After any refactor, diff-check that every auth/validation/audit call present before is present after; the cross-tenant, guardrail, and money test suites are the tripwire — they run after every refactor touching their areas.
+- **S11.8** **Plain-language security reporting.** Anything security-relevant (finding, risk accepted, rule bent, incident) is explained to the owner in non-technical language with the concrete consequence ("anyone on the internet could read every shop's revenue" — not "RLS policy gap on transactions").
+
 ---
 
 ## References (checked 2026-07-16)
@@ -111,3 +152,5 @@ Rule IDs (S1.1 …) are stable — reference them in PRs and reviews. `VERIFY:` 
 - [CSA: Slopsquatting supply-chain note (Apr 2026)](https://labs.cloudsecurityalliance.org/research/csa-research-note-slopsquatting-ai-supply-chain-20260419-csa/) · [Snyk: slopsquatting mitigation](https://snyk.io/articles/slopsquatting-mitigation-strategies/) · [TechTimes: agents skip package verification (Jul 2026)](https://www.techtimes.com/articles/319457/20260701/ai-coding-agents-skip-package-verification-attackers-are-exploiting-it.htm)
 - [VibeAppScanner: Supabase RLS & CVE-2025-48757 patterns](https://vibeappscanner.com/supabase-security) · [byteiota: 170+ apps exposed by missing RLS](https://byteiota.com/supabase-security-flaw-170-apps-exposed-by-missing-rls/) · [HN: 11% of vibe-coded apps leak Supabase keys](https://news.ycombinator.com/item?id=46662304)
 - [Prompt injection 2026 — OWASP LLM #1 guide](https://www.kunalganglani.com/blog/prompt-injection-2026-owasp-llm-vulnerability) · [ecorpit: agent security, containment strategy](https://ecorpit.com/ai-agent-security-prompt-injection-guardrails-2026/) · [Red Dog: LLM attack map 2026](https://reddogsecurity.substack.com/p/llm-security-in-2026-a-complete-attack)
+- [CVE-2025-29927 — Next.js middleware bypass: Datadog analysis](https://securitylabs.datadoghq.com/articles/nextjs-middleware-auth-bypass/) · [Vercel postmortem](https://vercel.com/blog/postmortem-on-next-js-middleware-bypass) · [NVD entry](https://nvd.nist.gov/vuln/detail/CVE-2025-29927)
+- [Vibe-coding anti-patterns: 7 failure modes (RLS `USING (true)`, public buckets, service keys in bundles)](https://theweatherreport.ai/posts/vibe-coding-anti-patterns/) · [Augment: agents gaming tests instead of fixing code](https://www.augmentcode.com/guides/why-ai-coding-agents-fail-e2e-tests) · [OpenSSF: security-focused AI code-assistant instructions](https://best.openssf.org/Security-Focused-Guide-for-AI-Code-Assistant-Instructions.html)

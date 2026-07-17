@@ -1,6 +1,6 @@
 # Rules for any AI working in this repo
 
-Read [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) first, and [docs/SECURITY.md](docs/SECURITY.md) before writing any code — its rules (S1–S9) are mandatory and override convenience, speed, and "just a demo" reasoning. Then follow these rules for every change.
+Read [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) first, and [docs/SECURITY.md](docs/SECURITY.md) before writing any code — its rules (S1–S11) are mandatory and override convenience, speed, and "just a demo" reasoning. Then follow these rules for every change.
 
 ## Skills to use (if installed)
 
