@@ -151,7 +151,8 @@ Note: the scaffold folder `backend/telegram_bot/` is superseded by `backend/app/
 7. **No invented facts.** Anything the AI tells a customer (price, wait, position) comes from a tool result. Anything a report states comes from `ledger_entries`/`transactions` queries.
 8. **Verification is part of the task.** A task without its verify step green is not done. Money/queue/booking logic requires pytest; bot flows require the scripted manual checklist in the phase file.
 9. **Deliberate shortcuts** are marked `# ponytail: <what's cut> — <upgrade path>` in code and collected in phase completion notes — collect via `/ponytail-debt` at phase end (see CLAUDE.md "Skills to use" section for all workflow skills).
-10. **Package versions**: `requirements.txt` pins exact versions chosen at build time (**VERIFY AT BUILD TIME**: latest stable of each; this plan pins only major lines listed in D1–D7).
+10. **Package versions**: `requirements.txt` pins exact versions chosen at build time (**VERIFY AT BUILD TIME**: latest stable of each; this plan pins only major lines listed in D1–D7). Every NEW dependency passes the slopsquatting check in [SECURITY.md](SECURITY.md) S8.1 first.
+11. **Security rules bind.** [SECURITY.md](SECURITY.md) S1–S9 apply to every task in every phase; phase completion notes include the security VERIFY results (S9.2).
 
 ## 7. Definition of Done per phase
 

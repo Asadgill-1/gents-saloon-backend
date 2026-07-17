@@ -9,9 +9,10 @@ Multi-tenant platform for gents barbershops: 4 Telegram bots per shop + global M
 Read in this order, then start executing:
 
 1. [CLAUDE.md](CLAUDE.md) — coding rules for this repo (mandatory)
-2. [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) — history + decision log
-3. [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md) — system overview, locked decisions, phase index, conventions, definitions of done
-4. The phase you're executing: [docs/phases/](docs/phases/) — **next up: [PHASE_0_FOUNDATIONS.md](docs/phases/PHASE_0_FOUNDATIONS.md)**
+2. [docs/SECURITY.md](docs/SECURITY.md) — binding security rules S1–S9 (mandatory before any code)
+3. [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) — history + decision log
+4. [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md) — system overview, locked decisions, phase index, conventions, definitions of done
+5. The phase you're executing: [docs/phases/](docs/phases/) — **next up: [PHASE_0_FOUNDATIONS.md](docs/phases/PHASE_0_FOUNDATIONS.md)**
 
 Reference specs (linked from phase docs as needed): [DATA_MODEL.md](docs/DATA_MODEL.md) · [BOT_FLOWS.md](docs/BOT_FLOWS.md) · [AI_SPEC.md](docs/AI_SPEC.md) · [DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) · [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [REQUIREMENTS.md](docs/REQUIREMENTS.md) (feature→phase traceability). Original owner spec: [Prompt.md.txt](Prompt.md.txt) — source of truth on conflicts.
 

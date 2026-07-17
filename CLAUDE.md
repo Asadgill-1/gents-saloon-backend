@@ -1,6 +1,6 @@
 # Rules for any AI working in this repo
 
-Read [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) first. Then follow these rules for every change.
+Read [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) first, and [docs/SECURITY.md](docs/SECURITY.md) before writing any code — its rules (S1–S9) are mandatory and override convenience, speed, and "just a demo" reasoning. Then follow these rules for every change.
 
 ## Skills to use (if installed)
 
@@ -67,6 +67,7 @@ Two rungs work → take the higher one, move on.
 - Input validation at trust boundaries (anything coming from frontend, Telegram, or webhook).
 - Error handling that prevents data loss (booking/payment/queue state).
 - Auth/security checks (Supabase RLS, API auth).
+- **Any rule in [docs/SECURITY.md](docs/SECURITY.md)** — the entire file sits on this list; violating an S-rule to simplify is never a valid ponytail shortcut.
 - Anything the owner explicitly asked for — build it in full, no re-arguing scope.
 
 ## Ponytail debt
