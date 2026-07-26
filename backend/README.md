@@ -20,7 +20,21 @@ Phase 2 T2.3 adds effective VAT/non-VAT legal-document selection, atomic fiscal-
 
 Phase 2 T2.4 adds completed-booking checkout with server-derived service/legal/commission facts, Decimal-only VAT and discount calculations, cash/card split tender, separate tips, immutable restricted commission snapshots, cash-shift linkage, and a balanced append-only journal. One idempotent transaction allocates the receipt and writes the receipt, payments, cash effect, journal, audit, and outbox.
 
-Phase 2 T2.5 adds append-only partial/full refunds and conservative cash-only same-shift full voids. Any original sale containing card tender must use a refund/credit note because terminal settlement is not tracked. The server derives every VAT, commission, tip, tender, cash, and journal reversal from the immutable original checkout snapshots; PostgreSQL independently bounds cumulative corrections and verifies exact reconciliation. Credit notes, cash return movements, linked reversing journals, audit, outbox, and idempotency commit atomically. T2.6 advances, payout runs, and settlement is next.
+Phase 2 T2.5 adds append-only partial/full refunds and conservative cash-only same-shift full voids. Any original sale containing card tender must use a refund/credit note because terminal settlement is not tracked. The server derives every VAT, commission, tip, tender, cash, and journal reversal from the immutable original checkout snapshots; PostgreSQL independently bounds cumulative corrections and verifies exact reconciliation. Credit notes, cash return movements, linked reversing journals, audit, outbox, and idempotency commit atomically.
+
+Phase 2 T2.6 adds owner/platform-admin advance grants and closed-period payout runs. PostgreSQL aggregates immutable commission, tip, and correction snapshots, enforces non-overlapping periods and one approved run per shop, caps deductions by advance outstanding and payable, and validates exact advance applications, cash movements, and balanced journals. Draft, approve, pay, and cancel mutations are independently authorized, idempotent, audited, and browser-write-inaccessible. T2.7 reports and the provider-neutral e-invoicing boundary are next.
+
+T2.6 mutation routes:
+
+```text
+POST /api/v1/businesses/{business_id}/shops/{shop_id}/advances
+POST /api/v1/businesses/{business_id}/shops/{shop_id}/payout-runs
+POST /api/v1/businesses/{business_id}/shops/{shop_id}/payout-runs/{payout_run_id}/approve
+POST /api/v1/businesses/{business_id}/shops/{shop_id}/payout-runs/{payout_run_id}/pay
+POST /api/v1/businesses/{business_id}/shops/{shop_id}/payout-runs/{payout_run_id}/cancel
+```
+
+All require `Idempotency-Key`. The authenticated browser role remains read-only through forced RLS; no public payout mutation contract exists.
 
 ## Local setup
 
@@ -104,6 +118,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-database.
 - Phase 2: `workers/bookings.py` hold expiry/T-30 promotion, plus later outbox dispatch and reconciliation/report preparation.
 - Phase 3: Telegram delivery, reminders, escalations, and scheduled reports.
 
-The official Supabase MCP is authenticated as project-scoped development tooling, and the official `supabase` plus `supabase-postgres-best-practices` skills are installed globally. MCP is not part of the deployed API/worker runtime. As of 2026-07-26, the development project has 41 forced-RLS-enabled public application tables and fifteen migrations. The only persisted rows are eight controlled journal-account references; tenant, transaction, and correction tables remain empty. The private ZIP-only `tenant-exports` bucket exists, Security Advisor has zero findings, checkout/correction/legal/booking/cash browser mutation policies and privileges are absent, missing FK indexes are zero, and Performance Advisor reports only expected unused-index INFO notices before production traffic. A live object upload/signed-download/delete smoke remains open until the backend receives its service-role credential through the approved secret channel.
+The official Supabase MCP is authenticated as project-scoped development tooling, and the official `supabase` plus `supabase-postgres-best-practices` skills are installed globally. MCP is not part of the deployed API/worker runtime. As of 2026-07-26, the development project has 45 forced-RLS-enabled public application tables and sixteen migrations. The only persisted rows are nine controlled journal-account references; tenant and financial tables remain empty. The private ZIP-only `tenant-exports` bucket exists, Security Advisor has zero findings, browser mutation policies and privileges for implemented Phase 2 domains are absent, missing FK indexes are zero, and Performance Advisor reports only expected unused-index INFO notices before production traffic. A live object upload/signed-download/delete smoke remains open until the backend receives its service-role credential through the approved secret channel.
 
 Next.js DevTools MCP `0.4.0` was evaluated and removed because it introduced unresolved High dependency advisories. Do not install it until an audited fixed release is available. A custom product MCP remains deferred until an approved external AI client requires scoped product access.

@@ -2,9 +2,9 @@
 
 Last updated: **2026-07-26, Asia/Dubai**
 
-Checkpoint: **PHASE2-CORRECTIONS-2026-07-26**
+Checkpoint: **PHASE2-PAYOUTS-2026-07-26**
 
-Current phase: **Phase 2 — T2.0–T2.5 complete; T2.6 advances/payout settlement next**
+Current phase: **Phase 2 — T2.0–T2.6 complete; T2.7 reports/e-invoicing boundary next**
 
 This is the authoritative restart document for a new human, LLM, or AI coding agent. Read it before planning or changing code.
 
@@ -29,17 +29,15 @@ This folder contains **three independent Git repositories**. Run Git checks and 
 | Shop dashboard | `saloon-shop-dashboard/` | `Asadgill-1/saloon-shop-dashboard` | Owner/shop/reception/POS frontend; Phase 4 product UI |
 | Platform dashboard | `saloon-gents-system-owner-dashboard/` | `Asadgill-1/saloon-gents-system-owner-dashboard` | Platform-owner SaaS operations frontend; Phase 5 product UI |
 
-All three repositories are on `main`, pushed, and synchronized with their remotes at the last committed T2.4 handoff checkpoint:
+All three repositories are on `main`, pushed, synchronized with their remotes, and green in GitHub Actions at the last committed T2.5 checkpoint:
 
-- backend/canonical docs: `54d4370830d57905b9b15b1ee453ca7f4593af99`;
-- shop dashboard: `eae7426ccca476ab7427ed7300ffa5941cf8aebc`;
-- platform dashboard: `fa8a58212014f7a8b2047b2b932709389fa071c9`.
+- backend/canonical docs: `8ae961c`;
+- shop dashboard: `be9b180`;
+- platform dashboard: `8c73502`.
 
 The matching GitHub Actions runs passed in all three repositories. Preserve unrelated future owner changes and inspect each repository independently before staging.
 
-The T2.4 checkout/journal implementation and synchronized handoff updates are included in those pushed commits. Both T2.4 Supabase migrations are applied remotely and locally use the matching remote versions `20260726092654` and `20260726094355`.
-
-The T2.5 implementation and this handoff update are local, verified changes after that pushed checkpoint and are not committed or pushed yet. Remote migrations `20260726105629_correction_credit_notes` and `20260726111301_correction_void_tender_hardening` are already applied to the project-scoped Supabase development project. The two dashboard repositories contain only their local T2.5 status-document updates.
+The T2.5 correction implementation and synchronized dashboard status updates are included in those pushed commits. T2.6 backend/schema/tests and the three repositories' handoff-document updates are currently local and uncommitted. Preserve this work and inspect each repository's status before staging. Remote migration `20260726115339_advance_payout_settlement` is already applied to the project-scoped Supabase development project; its matching local forward migration is `supabase/migrations/20260726113101_advance_payout_settlement.sql`.
 
 ## 3. Current delivery status
 
@@ -47,7 +45,7 @@ The T2.5 implementation and this handoff update are local, verified changes afte
 |---|---|---|
 | Phase 0 — foundation | **Implementation and CI verified; owner gates open** | Credential rotation and GitHub repository-protection evidence remain |
 | Phase 1 — tenant and SaaS platform | **Implementation complete; audit open** | T1.0–T1.6 locally verified; T1.7 cannot pass yet |
-| Phase 2 — booking, POS, and money | **In progress by owner direction** | T2.0–T2.5 complete; advances/payout settlement next |
+| Phase 2 — booking, POS, and money | **In progress by owner direction** | T2.0–T2.6 complete; reports/e-invoicing boundary next |
 | Phase 3 — Telegram and AI | Not started | Depends on Phase 1–2 services/outbox |
 | Phase 4 — shop dashboard | Not started | Only the technical Next.js foundation exists |
 | Phase 5 — platform dashboard | Not started | Only the technical Next.js foundation exists |
@@ -187,6 +185,15 @@ The T2.5 implementation and this handoff update are local, verified changes afte
 - PostgreSQL deferred validation independently enforces original-plus-corrections reconciliation, tender bounds, same-shift voids, cash linkage, and exact reversing postings. Receptionists cannot read correction commission rows, barbers cannot read return payments, and tenant/cross-shop boundaries remain forced by RLS and composite foreign keys.
 - Clean reconstruction, same-key replay, competing-refund race, exact half refund, full cash void, card-tender void denial at service/database layers, original immutability, journal/cash reconciliation, RLS/IDOR, and append-only tests pass.
 
+### Phase 2 advances, payout runs, and settlement
+
+- `POST .../advances` and the payout create/approve/pay/cancel routes are implemented. Only an active business owner or platform administrator may mutate; every route requires an `Idempotency-Key` and repeats tenant, role, and entitlement checks inside its transaction.
+- An advance disburses cash once from an open shift, debits `advance_receivable`, credits `cash`, and remains `open` until paid-run applications reduce outstanding to zero. There is no advance cancellation transition.
+- Payout periods are closed half-open UTC ranges `[start,end)`. Non-cancelled periods for one shop cannot overlap, and only one approved run can reserve a shop's outstanding advances at a time.
+- Draft items aggregate immutable commission/tip earning and correction snapshots from the period. Signed manual adjustments require a reason. Approval bounds deductions by both gross payable and outstanding advances; payment alone creates applications, cash settlement, and the exact journal.
+- Concurrent tests prove same-key advance/run replay, one winner for competing payment calls, no double deduction/payment, exact source totals, and cancellation without balance effects. Forced RLS proves receptionist none, barber-own reads, owner/business reads, unrelated-owner isolation, and platform visibility.
+- Native PostgreSQL reconstruction, SQL/RLS tests, 13 application database integration tests, Ruff, mypy, 61 backend tests, dependency audit, secret scans, and the T2.6 task security checkpoint pass.
+
 ### Both Next.js foundations plus T1.5 authorization shells
 
 - Next.js 16, React 19, Tailwind 4, strict TypeScript, ESLint, lockfiles, and SHA-pinned CI.
@@ -203,7 +210,7 @@ The T2.5 implementation and this handoff update are local, verified changes afte
 - Backend and both frontend full dependency audits are clean. The dashboards use Next's documented direct `@next/eslint-plugin-next` flat-config path, TypeScript ESLint, and React Hooks rules; this removed the vulnerable legacy lint dependency chain without weakening CI.
 - Built frontend bundles contain no checked backend-secret names.
 - Static checks found no unsafe serializer, dangerous Python execution, wildcard CORS, unverified JWT decode, browser token storage, or raw-HTML sink.
-- Project-scoped Supabase OAuth MCP is authenticated; fifteen migrations are applied and all 41 public application tables are forced-RLS-enabled. The only remote rows are eight controlled `journal_accounts` references; tenant, transaction, and correction tables remain empty. Security Advisor has zero findings.
+- Project-scoped Supabase OAuth MCP is authenticated; sixteen migrations are applied and all 45 public application tables are forced-RLS-enabled. The only remote rows are nine controlled `journal_accounts` references; tenant, transaction, correction, advance, and payout tables remain empty. Security Advisor has zero findings.
 - A dated security audit is now mandatory after every phase.
 - The Phase 1 audit found missing distributed throttling as High and fixed it. The audit remains not passed because inherited credential rotation, authenticated repository-protection evidence, and the live Storage round trip are open.
 
@@ -251,8 +258,8 @@ GET /health/live                 PASS — 200
 GET /health/ready                PASS — 200 with dependencies
 Redis stopped → readiness        PASS — 503 while PostgreSQL stayed ready
 workers.health.ping              PASS — Celery SUCCESS through real broker/worker
-Supabase application tables      PASS — 41 forced-RLS tables; 8 controlled journal-account rows only
-Supabase migrations              PASS — 5 Phase 1 + 10 Phase 2 forward migrations
+Supabase application tables      PASS — 45 forced-RLS tables; 9 controlled journal-account rows only
+Supabase migrations              PASS — 5 Phase 1 + 11 Phase 2 forward migrations
 Supabase Security Advisor        PASS — zero findings
 Supabase Performance Advisor     PASS — INFO-only unused indexes on empty tables
 ```
@@ -260,7 +267,7 @@ Supabase Performance Advisor     PASS — INFO-only unused indexes on empty tabl
 Phase 1/2 database:
 
 ```text
-scripts/test-database.ps1            PASS — reconstruction + RLS + 12 application database tests
+scripts/test-database.ps1            PASS — reconstruction + RLS + 13 application database tests
 Remote migrations                    PASS — tenant core, FK indexes, deny policies, entitlement and export/offboarding hardening
 Remote Security Advisor              PASS — 0 findings
 Remote Performance Advisor           PASS — INFO-only unused indexes on empty tables
@@ -270,7 +277,7 @@ Private tenant-exports bucket        PASS — private, ZIP-only, 100 MB, no brow
 Live Storage object round trip       OPEN — backend service-role runtime secret not provisioned
 Phase 2 operations SQL suite         PASS — catalog/customer/calendar/legal/commission constraints and RLS
 Remote Phase 2 migrations            PASS — operations source schema + calendar time hardening
-Remote public tables/RLS             PASS — 41/41 forced RLS; tenant/transaction/correction rows 0
+Remote public tables/RLS             PASS — 45/45 forced RLS; tenant/transaction/correction/advance/payout rows 0
 Remote browser mutation policies     PASS — 0
 Remote missing FK indexes            PASS — 0
 Phase 2 booking RLS/concurrency       PASS — holds, queue, allocation, worker, reschedule
@@ -285,6 +292,9 @@ Remote checkout browser mutations     PASS — 0 policies/privileges
 Phase 2 correction RLS/concurrency    PASS — replay, race bounds, void/refund, journal/cash reconciliation
 Remote correction migrations          PASS — 20260726105629 corrections + 20260726111301 void hardening
 Remote correction browser mutations   PASS — 0 policies/privileges
+Phase 2 payout RLS/concurrency         PASS — replay, period exclusion, one pay winner, exact advance/cash/journal
+Remote payout migration                PASS — 20260726115339 advance/payout settlement
+Remote payout browser mutations        PASS — 0 policies/privileges
 ```
 
 Workstation cleanup note:
@@ -309,16 +319,16 @@ Windows no longer exposes PID 11696 through `Get-Process`, CIM, or `tasklist`, s
 
 ## 7. Exact next starting point
 
-Continue [Phase 2 T2.6](docs/phases/PHASE_2_OPERATIONS_MONEY.md): advances, payout runs, and settlement.
+Continue [Phase 2 T2.7](docs/phases/PHASE_2_OPERATIONS_MONEY.md): reports and the provider-neutral e-invoicing boundary.
 
-1. Lock the advance and payout lifecycle, permissions, closed-period rule, adjustment policy, and journal/cash contracts before coding.
-2. Add forward-only schema for barber advances, payout runs/items, bounded advance applications, and lifecycle transitions.
-3. Implement one idempotent advance disbursement that creates the receivable, cash movement, journal, audit, and outbox atomically.
-4. Build immutable closed-period earning aggregation from transaction/correction commission and tip snapshots; never recompute from current rules.
-5. Implement draft → approved → paid/cancelled payout transitions, one non-cancelled run per shop/period, bounded advance deductions, and retry-safe cash/journal settlement.
-6. Prove concurrent advance/payout calls cannot double-disburse, double-deduct, or double-pay, and that every payout item/journal reconciles exactly.
+1. Expand T2.7 into executable tasks and lock report consumers, authorization, cursor order, date/timezone semantics, stored-snapshot equations, and export limits before coding.
+2. Implement cursor-paginated shop operational and financial reports that reconcile exactly to bookings, queue, transactions, corrections, cash shifts, payouts, and journal truth.
+3. Implement the business-owner cross-shop aggregate with database-derived business authorization and explicit shop grouping; never accept a client-selected unauthorized shop set.
+4. Add the provider-neutral e-invoice document/outbox state boundary only for in-scope platform B2B/B2G documents. Keep ordinary saloon B2C receipts separate.
+5. Do not add a provider SDK or claim UAE production accreditation until the owner selects an accredited service provider and the current legal contract is revalidated.
+6. Add RLS/IDOR, pagination stability, reconciliation, high-volume, retry, and safe-export tests; finish the T2.7 security checkpoint and update every handoff document.
 
-Inherited gates remain: owner Telegram credential rotation; authenticated repository-protection evidence; live private-Storage round trip; CSP resolution/acceptance. The last T2.4 commits, pushes, and remote CI are complete and green; current T2.5 source/docs are local and uncommitted. Do not mark Phase 1 passed until its audit evidence is complete.
+Inherited gates remain: owner Telegram credential rotation; authenticated repository-protection evidence; live private-Storage round trip; CSP resolution/acceptance. T2.5 is committed, pushed, synchronized, and green in remote CI across all three repositories. T2.6 is complete locally and remotely but is not yet committed or pushed. Do not mark Phase 1 passed until its audit evidence is complete.
 
 To restart the already-proven native dependencies:
 

@@ -11,8 +11,8 @@ Phase 1 implementation is locally verified, but its inherited credential/remote 
 - Complete: T2.2 booking, holds, availability, and queue.
 - Complete: T2.3 legal documents, receipt counters, and cash shifts.
 - Complete: T2.4 checkout, payments, commission snapshots, and balanced journal.
-- Complete: T2.5 void, refund, credit note, and journal reversal.
-- Next: T2.6 advances, payout runs, and settlement.
+- Complete: T2.6 advances, payout runs, and settlement.
+- Next: T2.7 reports and the provider-neutral e-invoicing boundary.
 
 ## Outcome
 
@@ -358,24 +358,47 @@ T2.5 security checkpoint:
 
 ### T2.6 — Advances, payout runs, and settlement
 
-Files:
+**Complete locally and on the project-scoped Supabase development database.**
 
-- advance/payout schema;
-- advance/payout services/APIs and concurrency tests.
+Files implemented:
 
-Implement:
+- `supabase/migrations/20260726113101_advance_payout_settlement.sql`;
+- `supabase/tests/phase2_payout_rls.sql`;
+- `backend/app/api/payouts.py`;
+- `backend/app/services/payout_service.py`;
+- `backend/tests/test_payout_contracts.py`;
+- `backend/tests/test_payout_database.py`;
+- `backend/app/main.py` and `scripts/test-database.ps1`.
 
-- advance disbursement/receivable;
-- closed-period immutable commission/tip aggregation;
-- draft → approved → paid/cancelled payout lifecycle;
-- bounded advance applications and journal/cash movement settlement.
+Implemented contract:
 
-Gates:
+- Only an active business owner or platform administrator may mutate advances or payouts. Managers retain approved RLS reporting access, receptionists have none, and barbers can read only their own advance, payout-item, and application rows.
+- `POST /api/v1/businesses/{business_id}/shops/{shop_id}/advances` grants an advance exactly once against an open cash shift and atomically records the receivable, cash movement, balanced journal, audit, outbox, and idempotency result.
+- A payout uses a closed half-open UTC period `[period_start, period_end)`, with `period_end <= prepared_at`. Non-cancelled periods for one shop cannot overlap.
+- Draft construction aggregates immutable transaction and correction snapshots in the period. A correction belongs to the period in which the correction was created.
+- Per-barber gross payable is `commission earnings + tip earnings - commission reversals - tip reversals + signed adjustment`. A non-zero adjustment requires a trimmed reason; gross cannot be negative and a run must have a positive aggregate gross.
+- Lifecycle is `draft → approved → paid` or `draft/approved → cancelled`. Approval uses a shop transaction advisory lock, allows only one approved run per shop, and computes advance deductions bounded by both outstanding advances and the barber's gross payable.
+- Payment alone creates append-only advance applications, reduces outstanding balances, records the cash payout when net paid is positive, and creates the exact balanced settlement journal. Cancellation before payment does not alter advance balances.
+- Advance journal: debit `advance_receivable`, credit `cash`. Payout journal: signed commission net against `barber_payable`, signed tip net against `tip_payable`, signed manual adjustments against `payout_adjustments`, credit `advance_receivable` for deductions, and credit `cash` for the cash net paid.
+- All five mutations require a valid `Idempotency-Key`, repeat actor/tenant/entitlement authorization inside the database transaction, reject client-derived earnings/deductions, and commit domain rows, audit, outbox, and replay result atomically.
 
-- advance disburses once and deducts once;
-- one non-cancelled payout run per shop/period;
-- payout retry cannot double-pay;
-- every item and journal entry balances exactly.
+Verification and gates:
+
+- Native PostgreSQL clean reconstruction, all Phase 1/2 SQL and RLS suites, and 13 application database integration tests pass. Docker-backed Supabase CLI reconstruction was unavailable because its local port was not running, so the documented native PostgreSQL fallback was used.
+- Concurrent same-key advance and payout creation return one durable result. Overlapping payout periods are rejected.
+- Concurrent distinct-key payment calls permit one winner; only the winning key replays. One advance application, one payout cash effect, and the expected two financial journals remain.
+- Exact test snapshot: commission AED 36, tips AED 10, commission reversals AED 18, tip reversals AED 5, adjustment AED 2, gross AED 25, advance deduction AED 5, net cash paid AED 20.
+- RLS test counts are receptionist `(0,0,0,0)`, own barber `(1,0,2,1)`, owner `(1,2,2,1)`, unrelated owner all zero, and platform administrator equal to owner. Browser mutation policies/privileges are absent; direct invalid backend mutations are rejected.
+- Remote migration `20260726115339_advance_payout_settlement` is applied. All 45 public tables use forced RLS; nine controlled journal-account rows are the only remote data. Browser mutation policies, missing foreign-key indexes, and exposed private validator functions are zero.
+- Backend gates pass: Ruff lint/format, mypy for 45 source files, `uv lock --check`, 61 tests with 13 expected database-gated skips, and `pip-audit` with no known vulnerability.
+
+T2.6 security checkpoint:
+
+- **Pass for this task checkpoint:** no unresolved Critical or High finding was found in the advance/payout change. This does not replace the mandatory dated Phase 2 audit at T2.8.
+- Full Git-history scans across all three repositories and targeted current-source scans report zero secrets. No unsafe serializer, dynamic execution, raw SQL interpolation, new security-definer function, permissive RLS policy, or client financial authority was introduced.
+- Supabase Security Advisor reports zero findings. Performance Advisor is INFO-only for unused indexes on an empty project.
+- The over-engineering review found no useful deletion or dependency reduction: the four finance tables and one service preserve independently enforceable tenant, lifecycle, visibility, and reconciliation boundaries.
+- Ponytail debt remains one existing T2.2 marker for the shop-wide booking allocation lock. T2.6 added no marker.
 
 ### T2.7 — Reports and provider-neutral e-invoicing boundary
 

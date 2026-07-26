@@ -24,7 +24,7 @@ Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the
 |---|---|---|---|
 | TEN-01 | One business has one primary owner and one or more shops | Schema + owner onboarding E2E | verified |
 | TEN-02 | Owner sees aggregate business data and every owned shop | API/RLS integration tests | verified |
-| TEN-03 | Staff, customers, services, queue, bookings, POS, shifts, bots, advances, and payouts are shop-scoped | Cross-shop matrix tests | planned |
+| TEN-03 | Staff, customers, services, queue, bookings, POS, shifts, bots, advances, and payouts are shop-scoped | Phase 1/2 cross-shop tests pass through advances/payouts; bots remain Phase 3 | partial |
 | TEN-04 | A staff user may have explicit memberships in one or more shops; no access is inferred from a request parameter | Auth-context tests | verified |
 | TEN-05 | Platform admin access is global, server-authorized, and audited | Privilege/audit plus suspended-tenant surface tests | verified |
 | TEN-06 | One customer visiting two shops has two isolated shop profiles | Composite tenant constraints + reconstructed RLS tests | verified |
@@ -77,9 +77,9 @@ Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the
 | MON-04 | Effective-dated immutable commission rules and transaction snapshots preserve history | Effective rule selection and restricted immutable snapshot tests pass | verified |
 | MON-05 | Rounding is half-up to fils; any remainder goes to shop; split always reconciles | Golden and range-invariant reconciliation tests pass | verified |
 | MON-06 | Advance grant creates one disbursement and one outstanding balance, not a negative earning | Ledger tests | planned |
-| MON-07 | Advance deduction occurs once at payout and cannot exceed allowed outstanding/payable balance | Concurrency/reconciliation tests | planned |
+| MON-07 | Advance deduction occurs once at payout and cannot exceed allowed outstanding/payable balance | Concurrent pay permits one winner; deferred database reconciliation proves one bounded application | built |
 | MON-08 | Payout run records gross earnings, deductions, adjustments, net, approval, and payment | Payout E2E | planned |
-| MON-09 | Every money mutation is atomic, idempotent, role-gated, and audited | Checkout and correction paths verified; advance/payout mutations remain Phase 2 work | built |
+| MON-09 | Every money mutation is atomic, idempotent, role-gated, and audited | Checkout, correction, advance, and payout paths verified through T2.6 | built |
 
 ## Telegram and AI
 

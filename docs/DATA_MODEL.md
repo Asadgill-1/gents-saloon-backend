@@ -1,6 +1,6 @@
 # Data Model — Production Schema Contract
 
-> Target schema contract. All five Phase 1 migrations and ten Phase 2 migrations through T2.5 are implemented and applied to the development Supabase project. Sections 5.2–5.4, 6, 7.1–7.7, 7.10, and 7.11 describe implemented schema; advance/payout sections remain target design. Read [../START_HERE.md](../START_HERE.md) for current status.
+> Target schema contract. All five Phase 1 migrations and eleven Phase 2 migrations through T2.6 are implemented and applied to the development Supabase project. Sections 5.2–5.4 and 6–7.11 describe implemented schema. Read [../START_HERE.md](../START_HERE.md) for current status.
 
 Source of truth for SQL migrations. PostgreSQL/Supabase is authoritative for tenancy, subscriptions, bookings, queue numbers, money, idempotency, audit, and outbox delivery.
 
@@ -45,7 +45,7 @@ document_type         receipt | tax_invoice | simplified_tax_invoice
                       | credit_note
 
 commission_rule_type  fixed_pct | tiered
-advance_status        open | settled | cancelled
+advance_status        open | settled
 payout_status         draft | approved | paid | cancelled
 cash_shift_status     open | closed
 
@@ -542,9 +542,11 @@ Rules support a shop default or barber override. Values are immutable; only the 
 ```text
 id, business_id, shop_id uuid
 barber_membership_id uuid
-original_amount, outstanding_amount numeric(14,2) CHECK (>= 0)
+cash_shift_id uuid
+original_amount numeric(14,2) CHECK (> 0)
+outstanding_amount numeric(14,2) CHECK (between 0 and original_amount)
 status advance_status
-given_by_membership_id uuid
+given_by_auth_user_id uuid
 given_at timestamptz
 note text NULL
 ```
@@ -559,18 +561,23 @@ created_at timestamptz
 UNIQUE (advance_id, payout_item_id)
 ```
 
-Advance grant increases a receivable and records cash out. It does not reduce earned commission. Applying it in a payout reduces outstanding exactly once.
+An advance has no cancellation transition. Granting increases the receivable and records cash out from an open shift; it does not reduce earned commission. Payment-time applications reduce outstanding exactly once and move the status from `open` to `settled` only at zero. Deferred validation ties the advance to its exact cash movement and balanced journal, and independently reconciles outstanding to the sum of paid-run applications.
 
 ### 7.9 `payout_runs` and `payout_items`
 
-Run header: shop, closed period, status, prepared/approved/paid actors and times. Unique non-cancelled `(shop_id, period_start, period_end)`.
+Run header: tenant/shop, closed half-open UTC period `[period_start,period_end)`, status, prepared/approved/paid/cancelled auth-user actors and times, and the settlement cash shift. `period_end <= prepared_at`; a GiST exclusion constraint rejects overlapping non-cancelled periods for a shop, and a partial unique index permits at most one approved run per shop.
 
-Each item stores barber, commission earnings, tips, adjustments, advance deduction, gross payable, and net paid. Checks require:
+Each item stores barber, immutable-period commission/tip earnings and reversals, a signed reasoned adjustment, advance deduction, gross payable, and net paid. Checks require:
 
 ```text
-gross_payable = commission_earnings + tips + adjustments
+gross_payable =
+  commission_earnings + tip_earnings
+  - commission_reversals - tip_reversals
+  + adjustments
 net_paid = gross_payable - advance_deduction
 ```
+
+A draft may be edited only while still draft. Approval computes deductions bounded by open advance outstanding and gross payable. Payment appends applications and settlement effects; paid runs/items are immutable. Cancellation before payment creates no advance application or cash/journal settlement. Database validators independently recompute the source snapshot, lifecycle totals, applications, cash effect, and grouped journal postings.
 
 ### 7.10 Cash shifts
 
@@ -585,11 +592,11 @@ net_paid = gross_payable - advance_deduction
 
 Financial truth is append-only:
 
-- `journal_accounts`: controlled account codes such as `cash`, `card_clearing`, `service_revenue`, `vat_payable`, `barber_payable`, `tip_payable`, `advance_receivable`, `refunds`.
+- `journal_accounts`: nine controlled account codes: `cash`, `card_clearing`, `service_revenue`, `vat_payable`, `barber_payable`, `tip_payable`, `advance_receivable`, `refunds`, and `payout_adjustments`.
 - `journal_entries`: event header, tenant, source type/id, idempotency key, actor, time.
 - `journal_postings`: account, optional barber, debit, credit; exactly one side positive.
 
-T2.4 seeds eight controlled accounts and posts checkout debits to `cash`/`card_clearing`, with credits to `service_revenue`, `barber_payable`, `vat_payable`, and `tip_payable`. T2.5 linked reversing entries debit the stored revenue/shop share, barber payable, VAT payable, and tip payable and credit the returned cash/card clearing amounts. Deferred constraint triggers require at least two postings, `SUM(debit) = SUM(credit) > 0`, and correction totals that exactly match the original snapshots and correction rows. Update/delete triggers reject changes.
+T2.4 seeds eight controlled accounts and posts checkout debits to `cash`/`card_clearing`, with credits to `service_revenue`, `barber_payable`, `vat_payable`, and `tip_payable`. T2.5 linked reversing entries debit the stored revenue/shop share, barber payable, VAT payable, and tip payable and credit the returned cash/card clearing amounts. T2.6 adds `payout_adjustments`: an advance debits `advance_receivable` and credits `cash`; a paid payout reduces signed commission/tip payables, posts signed adjustments, credits `advance_receivable` for applied advances, and credits `cash` for net cash paid. Deferred constraint triggers require at least two postings, `SUM(debit) = SUM(credit) > 0`, and exact source reconciliation. Update/delete triggers reject changes.
 
 ## 8. Reliability and audit
 

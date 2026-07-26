@@ -14,6 +14,7 @@ from app.api.context import router as context_router
 from app.api.corrections import router as corrections_router
 from app.api.health import router as health_router
 from app.api.legal_cash import router as legal_cash_router
+from app.api.payouts import router as payouts_router
 from app.api.platform.exports import router as platform_exports_router
 from app.api.platform.subscriptions import router as platform_subscriptions_router
 from app.api.platform.tenants import router as platform_tenants_router
@@ -83,6 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(bookings_router)
     app.include_router(checkout_router)
     app.include_router(corrections_router)
+    app.include_router(payouts_router)
     app.include_router(legal_cash_router)
     app.include_router(platform_tenants_router)
     app.include_router(platform_subscriptions_router)
