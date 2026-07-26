@@ -1,53 +1,53 @@
-# Gents Saloon — UAE Multi-Tenant Barbershop Bot & POS Platform
+# Gents Saloon — UAE Multi-Shop SaaS, POS, and Reception
 
-Multi-tenant platform for gents barbershops: 4 Telegram bots per shop + global Master bot, AI receptionist (Moonshot, EN/AR/HI/UR), dynamic queue + appointments, POS with commissions/advances/ledger, tablet web UI, platform-owner dashboard.
+> **New agent or resumed session:** begin with [START_HERE.md](START_HERE.md). It contains the exact implemented state, blockers, verification evidence, and next command.
 
-**Status: fully planned, not yet built.** The plan is the product of this repo right now — any AI (or human) can build the system from the docs alone.
+Production plan and future backend for a multi-tenant saloon platform: one business owner may operate multiple shops; each shop keeps its staff, customers, queue, appointments, POS, cash, commissions, advances, and payouts isolated.
 
-## For any AI opening this repo
+Product surfaces:
 
-Read in this order, then start executing:
+- Four Telegram bots per shop plus one global master bot.
+- Moonshot-assisted customer reception in English, Arabic, Hindi, and Urdu.
+- Shop dashboard for owner overview/switching, reception, POS, money, and reports.
+- Platform dashboard for onboarding, cash subscriptions, suspension, exports, and offboarding.
+- Manual cash SaaS billing with business-wide or per-shop mode.
 
-1. [CLAUDE.md](CLAUDE.md) — coding rules for this repo (mandatory)
-2. [docs/SECURITY.md](docs/SECURITY.md) — binding security rules S1–S11 (mandatory before any code)
-3. [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) — history + decision log
-4. [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md) — system overview, locked decisions, phase index, conventions, definitions of done
-5. The phase you're executing: [docs/phases/](docs/phases/) — **next up: [PHASE_0_FOUNDATIONS.md](docs/phases/PHASE_0_FOUNDATIONS.md)**
+Status: Phase 2 is active by explicit owner approval. T2.0–T2.3 are complete locally and on the empty Supabase development project: operation sources, booking/queue, effective legal documents, fiscal-year counters, and cash-shift reconciliation are verified. T2.4 checkout, payments, VAT, and commission snapshots are next. Phase 1 implementation is complete, but its [dated audit](docs/security-audits/PHASE_1_2026-07-26.md) remains open for inherited credential and remote operational evidence.
 
-Reference specs (linked from phase docs as needed): [DATA_MODEL.md](docs/DATA_MODEL.md) · [BOT_FLOWS.md](docs/BOT_FLOWS.md) · [AI_SPEC.md](docs/AI_SPEC.md) · [DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) · [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [REQUIREMENTS.md](docs/REQUIREMENTS.md) (feature→phase traceability). Original owner spec: [Prompt.md.txt](Prompt.md.txt) — source of truth on conflicts.
+## Required reading
 
-## Stack
+1. [Current handoff](START_HERE.md)
+2. [CLAUDE.md](CLAUDE.md)
+3. [Active Phase 2 checklist](docs/phases/PHASE_2_OPERATIONS_MONEY.md)
+4. [Latest security audit](docs/security-audits/PHASE_1_2026-07-26.md)
+5. [Security rules](docs/SECURITY.md)
+6. [Project decisions](docs/PROJECT_CONTEXT.md)
+7. [Master plan](docs/MASTER_PLAN.md)
+8. [Requirements ledger](docs/REQUIREMENTS.md)
+9. [Data model](docs/DATA_MODEL.md)
 
-| Layer | Tech |
-|---|---|
-| Backend API + bots | Python 3.12+, FastAPI, aiogram 3 (buttons-only UX) |
-| Database / Auth / Realtime | Supabase (PostgreSQL, RLS mandatory) |
-| Queue/locks/cache | Redis |
-| Background & scheduled | Celery 5 + Celery Beat |
-| AI receptionist | Moonshot AI (OpenAI-compatible, tool-calling only) |
-| Frontend (Phase 2/3) | Next.js App Router, Tailwind, shadcn/ui, Supabase Realtime |
-| Deploy (Phase 4) | 1 VPS: Docker Compose (api, worker, beat, redis, caddy) |
+Supporting specifications: [architecture](docs/ARCHITECTURE.md), [bot flows](docs/BOT_FLOWS.md), [AI](docs/AI_SPEC.md), and [design system](docs/DESIGN_SYSTEM.md).
 
-## Repos (GitHub: Asadgill-1)
+## Delivery order
 
-| Repo | Holds | Deploy |
+1. [Foundation](docs/phases/PHASE_0_FOUNDATIONS.md)
+2. [Tenant and SaaS platform](docs/phases/PHASE_1_TENANT_PLATFORM.md)
+3. [Booking, POS, and money](docs/phases/PHASE_2_OPERATIONS_MONEY.md)
+4. [Telegram and AI](docs/phases/PHASE_3_TELEGRAM_AI.md)
+5. [Shop dashboard](docs/phases/PHASE_4_SHOP_DASHBOARD.md)
+6. [Platform dashboard](docs/phases/PHASE_5_PLATFORM_DASHBOARD.md)
+7. [Production hardening](docs/phases/PHASE_6_PRODUCTION.md)
+
+## Repositories
+
+| Repository | Responsibility | Deployment |
 |---|---|---|
-| [gents-saloon-backend](https://github.com/Asadgill-1/gents-saloon-backend) | **this repo** — backend, supabase migrations, canonical docs | VPS Docker Compose (Phase 4) |
-| [saloon-shop-dashboard](https://github.com/Asadgill-1/saloon-shop-dashboard) | Phase 2 Next.js app: /board, /analytics, /q/[slug] | Vercel from `main` |
-| [saloon-gents-system-owner-dashboard](https://github.com/Asadgill-1/saloon-gents-system-owner-dashboard) | Phase 3 Next.js app: platform admin console | Vercel from `main` |
+| `gents-saloon-backend` | This repository: backend, migrations, canonical docs | Hardened VPS Compose |
+| `saloon-shop-dashboard` | Shop operations and business-owner frontend | Vercel |
+| `saloon-gents-system-owner-dashboard` | Platform-owner frontend | Vercel |
 
-Docs here are canonical; dashboard repos carry synced copies of DESIGN_SYSTEM + their phase doc + ARCHITECTURE.
+Canonical documents live here and are synced into the relevant dashboard repository after changes.
 
-## Folder map (this repo)
+## Immediate security action
 
-```
-docs/                 the plan (see reading order above)
-  phases/             PHASE_0 … PHASE_4 execution docs
-backend/              Python app (Phase 0 fills this)
-supabase/migrations/  SQL migrations (Phase 0, from DATA_MODEL.md)
-Prompt.md.txt         original owner spec — do not edit
-```
-
-## Quickstart (after Phase 0 is built)
-
-Documented in PHASE_0_FOUNDATIONS.md T0.8 — install, `.env` from `.env.example`, apply migrations, `uvicorn app.main:app`, `celery -A app.core.celery_app worker`, seed script. Until then there is nothing to run.
+The local `tokkens.txt` file is now ignored, but its existing Telegram credentials must be rotated by the owner before any bot work. Follow [SECRET_ROTATION_RUNBOOK.md](docs/SECRET_ROTATION_RUNBOOK.md) without copying token values into chat or Git.

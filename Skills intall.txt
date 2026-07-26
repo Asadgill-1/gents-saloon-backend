@@ -1,0 +1,10 @@
+https://github.com/JuliusBrussee/caveman.git
+
+https://github.com/multica-ai/andrej-karpathy-skills.git
+
+https://github.com/DietrichGebert/ponytail.git
+
+https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git
+
+
+https://github.com/anthropics/claude-code/blob/main/plugins/frontend-design/skills/frontend-design/SKILL.md

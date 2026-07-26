@@ -1,0 +1,1 @@
+"""Gents Saloon backend application."""

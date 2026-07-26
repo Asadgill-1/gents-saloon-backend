@@ -1,10 +1,25 @@
 .env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 .venv/
 venv/
 node_modules/
 *.log
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# local credentials and generated tenant data
+tokkens.txt
+supabase/.temp/
+tokens.txt
+*.pem
+*.key
+tenant-exports/
+backups/
 
 # sibling dashboard repos live in this folder locally but have their own git repos (D13)
 saloon-shop-dashboard/

@@ -1,72 +1,43 @@
-# PHASE 0 — FOUNDATIONS
+# Phase 0 — Specification, Secrets, and Engineering Foundation
 
-Goal: a runnable empty skeleton — config, DB schema + RLS live in Supabase, Redis + Celery wired, tests running. No product features. Prereqs: Python 3.12+, a Supabase project (owner supplies URL + keys), Redis reachable locally (installer or Docker or Memurai on Windows — dev machine is Windows 10).
+## Progress — 2026-07-25
 
-Execute tasks in order. Every task ends with its **Verify** green before moving on.
+- Complete: canonical production contracts and dashboard documentation sync.
+- Complete: backend package, validated/redacted configuration, async PostgreSQL pool, Redis client, Celery app, `workers/health.py`, liveness/readiness routes, strict checks, tests, and `uv.lock`.
+- Complete: development PostgreSQL/Redis Compose definition and SHA-pinned backend CI.
+- Complete: both Next.js 16 repositories with strict TypeScript, Tailwind, Supabase SSR clients/proxy using verified claims, security headers, environment tests, lockfiles, and SHA-pinned CI.
+- Verified locally: backend lock, Ruff, formatting, mypy, 9 tests, and dependency audit pass; each frontend passes clean `npm ci`, lint, TypeScript, 3 tests, production build, and a zero-vulnerability full npm audit.
+- Verified live without Docker: PostgreSQL 17.10 and the separate authenticated Memurai instance bind only to localhost; FastAPI liveness/readiness return `200`; Redis loss makes readiness return `503` while PostgreSQL remains ready; `workers.health.ping` completes through the real Celery worker with `SUCCESS`.
+- Verified live through the project-scoped Supabase MCP: no application tables, project migrations, Edge Functions, security advisor findings, or performance advisor findings exist before Phase 1.
+- Verified locally: credential-pattern scans found no matches in current project files (excluding the intentionally untracked owner token scratch file) or any of the three Git histories.
+- Ponytail ledger: no source-code `ponytail:` debt markers.
+- Security audit: rerun and recorded in [../security-audits/PHASE_0_2026-07-25.md](../security-audits/PHASE_0_2026-07-25.md). The audit is not passed while token rotation and remote-CI/repository-control evidence remain open.
+- Deferred security: Next.js DevTools MCP `0.4.0` currently introduces unresolved high-severity npm audit findings through its pinned MCP SDK. Do not install or activate it until an audited fixed release is available. A custom product MCP is unnecessary until an approved external AI client needs scoped platform access.
+- Fixed security finding P0-SEC-010: replaced the vulnerable `eslint-config-next` convenience chain with Next's documented direct ESLint plugin flat config plus TypeScript ESLint and React Hooks rules.
+- Pending owner: revoke/replace every Telegram token in `tokkens.txt`.
+- Environment gate closed through the documented native Windows fallback. Docker Desktop still requires BIOS virtualization/WSL repair, but it no longer blocks local Phase 0 dependency proof.
+- Pending remote: CI workflows execute after these changes are pushed.
 
-## T0.1 — Backend package layout + dependencies
+## Outcome
 
-Files: `backend/requirements.txt`, `backend/app/__init__.py` and every package `__init__.py`, `backend/app/main.py` (FastAPI factory + `/health` stub), delete `backend/telegram_bot/` (superseded by `app/bots/`, see MASTER_PLAN §4), delete `.gitkeep` files in folders that gain real files.
+The three repositories have one consistent production contract, safe configuration, reproducible skeletons, and CI. No business feature is built on the former single-shop authorization or advance model.
 
-`requirements.txt` — pin exact versions at build time (**VERIFY AT BUILD TIME**: latest stable of each): `fastapi`, `uvicorn[standard]`, `aiogram` (3.x line), `celery[redis]` (5.x), `redis`, `supabase` (2.x), `openai`, `pydantic-settings`, `cryptography`, `httpx`, `pytest`, `pytest-asyncio`.
+## Work
 
-Verify: `pip install -r requirements.txt` clean; `python -c "import app"` (from `backend/`) no error.
+1. Merge the approved production revision into canonical master plan, requirements, data model, architecture, security, bot/AI/UI specifications, and phase files.
+2. Ignore local secret scratch files. Owner rotates every token documented in [../SECRET_ROTATION_RUNBOOK.md](../SECRET_ROTATION_RUNBOOK.md); run secret scanning over tree and history.
+3. Scaffold backend package, configuration validation, structured/redacted logging, async PostgreSQL pool, Supabase Auth/admin clients, Redis, Celery, health endpoints, pytest, lint/type checks, and Docker development services.
+4. Scaffold both Next.js repositories with supported stable versions, strict TypeScript, linting, tests, Supabase SSR auth, safe headers, and environment validation.
+5. Add CI for secret scan, dependency audit, format/lint/type, tests, frontend build, and SQL migration reconstruction. Pin CI actions by commit SHA.
+6. Create development and staging configuration without production data or credentials.
 
-## T0.2 — Settings and clients (`app/core/`)
+## Gates
 
-- `config.py`: `Settings(BaseSettings)` — every var from MASTER_PLAN §5, `.env` loaded, missing required var fails fast at startup with a clear name.
-- `supabase.py`: `get_supabase()` returning a service-role client (singleton).
-- `redis.py`: `get_redis()` asyncio client (singleton).
-- `security.py`: `encrypt_token(str)->str` / `decrypt_token(str)->str` (Fernet with `FERNET_KEY`); `constant_time_eq` for webhook secrets (`hmac.compare_digest`).
-- `logging.py`: stdlib logging, JSON lines in prod, human format in dev, level from ENV.
-
-Verify: `pytest tests/test_core.py` — settings load from a temp `.env`; encrypt→decrypt round-trip; missing `FERNET_KEY` raises at import of settings.
-
-## T0.3 — Migrations (all of DATA_MODEL.md)
-
-Files: `supabase/migrations/0001_enums.sql` … `0006_seed_static.sql` exactly as specified in [DATA_MODEL.md](../DATA_MODEL.md) (enums, 17 tables, indexes, RLS enable + policies, `get_public_queue`, append-only triggers for `ledger_entries`/`audit_log`).
-
-Apply via Supabase MCP `apply_migration` if available, else the SQL editor / `supabase db push`. Idempotency is mandatory — applying the full set twice must produce zero errors.
-
-Verify:
-1. Apply twice, second run clean.
-2. SQL probe: `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'` ≥ 17; `SELECT * FROM pg_policies` shows policies on every table.
-3. `UPDATE ledger_entries …` on a dummy row raises the append-only exception.
-4. As `anon` key: every table SELECT denied; `SELECT * FROM get_public_queue('nope')` returns 0 rows without error.
-
-## T0.4 — Celery skeleton
-
-- `app/core/celery_app.py`: Celery instance (`broker/backend` from settings), `task_acks_late=True`, `worker_prefetch_multiplier=1`, timezone UTC, autodiscover `workers/`. Empty `beat_schedule` dict (filled in 1H) + one `ping` task in `workers/tasks_health.py`.
-
-Verify (3 terminals or background): `celery -A app.core.celery_app worker -l info --pool=solo` (Windows dev needs `--pool=solo`), `celery -A app.core.celery_app inspect ping` → pong; `ping.delay().get(timeout=10)` returns.
-
-## T0.5 — FastAPI app + health
-
-- `app/main.py`: app factory; routers `api/health.py` (real checks: Supabase trivial select, Redis PING, Celery ping with 2s timeout — each reported `ok|fail`), `api/telegram.py` and `api/public.py` as empty routers (Phase 1 fills them).
-- Dev entry: `uvicorn app.main:app --reload` from `backend/`.
-
-Verify: `GET /health` → 200 `{"db":"ok","redis":"ok","celery":"ok"}` with everything up; kill Redis → `"redis":"fail"` and HTTP 503.
-
-## T0.6 — Enums + DTO mirrors
-
-`app/models/enums.py`: Python `StrEnum` for every DB enum in DATA_MODEL §1 (single source for code; names identical to SQL values). `app/models/schemas.py`: pydantic DTOs for Booking, Transaction, Service, Customer, Staff, Shop (fields matching tables; Decimal for money).
-
-Verify: `pytest tests/test_models.py` — enum values match a hardcoded expected list (guards accidental drift from SQL).
-
-## T0.7 — Seed script
-
-`backend/scripts/seed_demo.py`: creates (idempotent by slug) demo shop "Demo Gents" (`demo-gents`), 1 owner + 1 receptionist + 2 barbers (telegram ids from CLI args or env), 5 services (Haircut 50/30min, Beard 30/20, Haircut+Beard 70/45, Kids 35/20, Shave 25/15), shop-default commission rule fixed 50%, and prints created ids. Uses the same `shop_service` functions the Master bot will use later where they exist; direct inserts otherwise (replaced in 1A).
-
-Verify: run twice → second run reports "exists, skipping"; rows visible in Supabase; `SELECT get_public_queue('demo-gents')` runs (0 rows, no error).
-
-## T0.8 — Repo hygiene
-
-Update root `.env.example` to the full MASTER_PLAN §5 table. Update `README.md` quickstart (install, .env, migrations, run api/worker, seed). Add `backend/pytest.ini` (asyncio mode auto, testpaths).
-
-Verify: fresh-clone dry-run per MASTER_PLAN §7 Phase 0 Definition of Done — all steps pass on this machine.
-
-## Ponytail ledger (allowed shortcuts this phase)
-
-- Single Redis DB, no cluster — upgrade path: env-split DBs if contention appears.
-- No Alembic-style migration tool — plain numbered SQL is the system; revisit only if a second environment demands rollbacks.
-- Windows dev uses `--pool=solo` Celery — prod (Linux) uses default prefork; documented in PHASE_4.
+- Fresh clones install from lockfiles and start locally using only documented environment names.
+- Missing/invalid production configuration fails at startup without revealing values.
+- No secrets are present in tracked files or Git history; old Telegram tokens are confirmed revoked by the owner.
+- Backend health distinguishes liveness from platform-admin readiness details.
+- Both frontends authenticate through Supabase SSR and contain no backend secret.
+- CI passes on all three repositories.
+- Run the full phase security audit from [../security-audits/README.md](../security-audits/README.md), write the dated audit note, and leave zero unresolved Critical/High findings.
+- Run `ponytail-debt` and record intentional deferrals.

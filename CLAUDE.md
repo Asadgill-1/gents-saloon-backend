@@ -1,6 +1,6 @@
 # Rules for any AI working in this repo
 
-Read [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) first, and [docs/SECURITY.md](docs/SECURITY.md) before writing any code — its rules (S1–S11) are mandatory and override convenience, speed, and "just a demo" reasoning. Then follow these rules for every change.
+Read [START_HERE.md](START_HERE.md) first, then [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md), the active phase file, and [docs/SECURITY.md](docs/SECURITY.md) before writing code. Security rules are mandatory and override convenience, speed, and "just a demo" reasoning. Then inspect `git status` separately in the root and both nested dashboard repositories.
 
 ## Skills to use (if installed)
 
@@ -10,10 +10,15 @@ This repo's workflow assumes these skills. Invoke them at the stated moments. **
 |---|---|---|---|
 | `/ponytail` | Start of ANY coding task (write, add, refactor, fix, review, choose dependency) | Enforces the lazy-senior sizing ladder: YAGNI → reuse repo code → stdlib → platform feature → installed dep → one line → minimum code | "Sizing ladder" section below — same rules, follow manually |
 | `/karpathy-guidelines` | Before writing or reviewing any code | Anti-LLM-mistake rules: understand first, state assumptions, surgical edits, verifiable success criteria | "Before writing code", "Surgical edits", "Verify" sections below |
+| `/ponytail-audit` | End of every phase, alongside the security audit | Finds removable complexity only; it is not a security scanner | Review dependencies, wrappers, factories, speculative abstractions, and dead flexibility manually |
 | `/ponytail-debt` | End of every phase + before any release/deploy (phase docs' "Ponytail ledger" / completion notes expect this) | Harvests every `# ponytail:` comment in the repo into a debt ledger report so shortcuts don't rot | `grep -rn "ponytail:" backend/ frontend/` → list every hit (file:line, what's cut, upgrade path) in the phase completion note |
-| `/ui-ux-pro-max`, `/frontend-design`, `/design` | Start of Phase 2 and Phase 3 only | Design intelligence refinement | Tokens/wireframes/specs already embedded in [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) — locked, sufficient alone |
+| `/ui-ux-pro-max`, `/frontend-design`, `/design-system`, `/ui-styling` | Start of Phase 4 and Phase 5 UI implementation | Design intelligence, tokens, accessible components | Canonical direction lives in [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) |
 
-Usage pattern per phase: `/ponytail` + `/karpathy-guidelines` at task start → build with rules below → `/ponytail-debt` at phase end, paste ledger into completion note.
+Usage pattern per phase: `/ponytail` + `/karpathy-guidelines` at task start → build with rules below → full security audit + `/ponytail-audit` + `/ponytail-debt` at phase end → record all three in the dated phase completion note.
+
+## Mandatory phase security gate
+
+Every phase ends with the process in [docs/security-audits/README.md](docs/security-audits/README.md). Write a dated `PHASE_<N>_<YYYY-MM-DD>.md` audit note with the commands run, results, findings, fixes, and external checks that could not run. A phase cannot be marked complete while any Critical or High finding remains unresolved. Medium and Low risks require an owner, remediation trigger/date, and explicit written acceptance. `ponytail-audit` is a separate complexity review and never satisfies this gate.
 
 ## Sizing ladder — stop at first rung that holds
 
@@ -82,4 +87,4 @@ Shortcuts marked with `# ponytail:` comments are debt, not forgotten work. When 
 
 ## Status tracking
 
-Nothing is built yet — check [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for what's actually been asked before assuming scope. Append new decisions to [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) as they happen.
+Phase 2 is active by explicit owner approval. T2.0–T2.3 are complete: operation sources, booking/queue, effective legal-document selection, fiscal-year sale/credit-note counters, and reconciled cash shifts are locally/remotely verified. Continue at T2.4 checkout, payments, VAT, and commission snapshots. Phase 1 implementation is complete but its credential/remote operational audit gates remain open; never hide or mark them passed without evidence. Read [START_HERE.md](START_HERE.md), check [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md), update the active phase checklist, and append durable decisions to [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md).

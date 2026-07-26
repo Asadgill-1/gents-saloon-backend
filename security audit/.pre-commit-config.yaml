@@ -1,0 +1,83 @@
+# Pre-commit security gate — the L1 loop from SECURITY.md, run automatically on every `git commit`.
+#
+# Install once per repo:
+#   pip install pre-commit
+#   cp .pre-commit-config.yaml <repo-root>/
+#   pre-commit install
+# Run against all files anytime:  pre-commit run --all-files
+#
+# A hit BLOCKS the commit. Fix the code (never the check) then re-commit — the fix-loop (S17.2).
+# The local hooks use pre-commit's `pygrep` language: the `entry` is a regex; the hook FAILS when the
+# pattern is found in a staged file of the listed types. Tune paths/excludes to your PROJECT CARD.
+
+repos:
+  # --- Secret scanning (S1.1, S15.1) ---
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4                 # VERIFY AT BUILD TIME: pin to the current gitleaks release
+    hooks:
+      - id: gitleaks
+
+  # --- Hygiene: block accidental keys / large blobs (S1.1) ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0                  # VERIFY AT BUILD TIME: current release
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # --- Pattern guards: SECURITY.md VERIFY lines as blocking regex hooks (no shell, valid YAML) ---
+  - repo: local
+    hooks:
+      # S3.2 — dangerous primitives
+      - id: s3-2-no-dangerous-primitives
+        name: "S3.2 no eval/exec/pickle/shell=True"
+        language: pygrep
+        entry: '(?:eval\(|exec\(|pickle\.load|yaml\.load\(|os\.system|shell=True|child_process\.exec\()'
+        types_or: [python, javascript, ts, tsx]
+        exclude: '(?:^|/)(?:tests?|spec|__tests__)/'
+
+      # S11.1 — pickle serializer in Celery config = RCE
+      - id: s11-1-no-celery-pickle
+        name: "S11.1 celery: no pickle serializer"
+        language: pygrep
+        entry: '(?:accept_content|task_serializer|result_serializer).*pickle'
+        types: [python]
+
+      # S2.3 — RLS theater
+      - id: s2-3-no-rls-using-true
+        name: "S2.3 no USING(true) RLS policies"
+        language: pygrep
+        entry: 'USING\s*\(\s*true\s*\)'
+        types: [sql]
+
+      # S4.2 — unverified JWT decode
+      - id: s4-2-no-unverified-jwt
+        name: "S4.2 no unverified JWT decode"
+        language: pygrep
+        entry: '(?:verify_signature\s*=\s*False|algorithms\s*=\s*\[\s*["'']?none)'
+        types_or: [python, javascript, ts, tsx]
+
+      # S4.4 — tokens in localStorage/sessionStorage (XSS-stealable)
+      - id: s4-4-no-token-in-webstorage
+        name: "S4.4 no tokens in local/sessionStorage"
+        language: pygrep
+        entry: '(?i)(?:localStorage|sessionStorage)\.(?:set|get)Item\(\s*["''][^"'']*(?:token|jwt|session|secret|key)'
+        types_or: [javascript, ts, tsx, vue]
+
+      # S5.1 — raw-HTML sinks (XSS). Blocks; if the content is provably static, review then commit with --no-verify.
+      - id: s5-1-flag-raw-html
+        name: "S5.1 flag raw-HTML sinks (review: must not be user/DB data)"
+        language: pygrep
+        entry: '(?:dangerouslySetInnerHTML|v-html|\.innerHTML\s*=|document\.write\()'
+        types_or: [javascript, ts, tsx, vue]
+
+      # S1.1 — obvious hardcoded secret assignment (gitleaks is primary; this is a fast backstop)
+      - id: s1-1-no-hardcoded-secret
+        name: "S1.1 no hardcoded secret assignment"
+        language: pygrep
+        entry: '(?i)(?:api[_-]?key|secret|token|passwd|password|bearer)["'' ]*[:=]["'' ]*[A-Za-z0-9_\-]{16,}'
+        types_or: [python, javascript, ts, tsx, vue]
+        exclude: '(?:^|/)(?:tests?|spec)/'

@@ -1,54 +1,126 @@
-# Requirements — feature ledger & traceability
+# Requirements — Production Feature Ledger
 
-Source of truth: [../Prompt.md.txt](../Prompt.md.txt) (owner spec) + owner Q&A decisions (2026-07-16, logged in PROJECT_CONTEXT.md). Every spec item maps to a phase task below — this table is the "nothing dropped" checklist. Statuses: ☐ planned / ☑ built+verified.
+Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the named automated or operational proof.
 
-## Confirmed features (traceability matrix)
+> Current phase, blockers, and exact next task: [../START_HERE.md](../START_HERE.md). Product requirements below remain planned unless explicitly marked otherwise.
 
-| # | Requirement (spec ref) | Phase / task | Status |
+## Engineering foundation
+
+| ID | Requirement | Verification | Status |
 |---|---|---|---|
-| R1 | FastAPI backend, webhooks, business logic (§1) | 0 / 1A | ☐ |
-| R2 | Supabase multi-tenant, shop_id isolation, RLS on all tables (§1) | 0 (T0.3) | ☐ |
-| R3 | Redis: sessions, queue tokens, booking locks (§1) | 0/1B | ☐ |
-| R4 | Celery + Beat: auto-confirms, EOD, monthly, health checks (§1) | 1B/1C/1H | ☐ |
-| R5 | Moonshot AI, 4 languages, intent-only, tool-calling, zero hallucination (§1, §3) | 1G | ☐ |
-| R6 | 4 bots per shop + telegram_user_id RBAC mapping (§2) | 1A | ☐ |
-| R7 | Master bot: onboarding, health, escalations, blocks, global analytics (§2) | 1A/1G/1H | ☐ |
-| R8 | Shop Owner bot: revenue, commissions, advances, audit (§2) | 1F | ☐ |
-| R9 | Receptionist bot: confirms, service times, walk-ins, advances, EOD trigger (§2) | 1D/1E | ☐ |
-| R10 | Barber bot: daily queue, 1-button 5-min reminder, private daily/monthly financials (§2) | 1F/1H | ☐ |
-| R11 | Customer bot: AI booking + public queue link (§2) | 1B/1G | ☐ |
-| R12 | AI system prompt verbatim + guardrail canned reply exact (§3) | 1G (AI_SPEC §3) | ☐ |
-| R13 | Personalization: ask name, greet returning by name (§3) | 1B | ☐ |
-| R14 | Dynamic queue booking flow via AI tools (§3, §4A) | 1B/1G | ☐ |
-| R15 | Receptionist new-booking card + [View last 25 messages] (§4A) | 1B/1D | ☐ |
-| R16 | 5-minute auto-confirm w/ default time; receptionist confirm sets est time (§4A) | 1B/1D | ☐ |
-| R17 | Confirmation msg: token + est wait + live queue link; barber notified (§4A) | 1B | ☐ |
-| R18 | Barber [Customer arriving in 5 mins] → exact customer message (§4B) | 1F | ☐ |
-| R19 | POS walk-in: barber → service → amount (§4C) | 1D/1E | ☐ |
-| R20 | Hybrid commissions: Rule A fixed %, Rule B tiered threshold (§4C) | 1E | ☐ |
-| R21 | Tips 100% to barber, logged separately (§4C) | 1E | ☐ |
-| R22 | Advances: one-time or monthly deduction, ledger adjusted (§4C) | 1E/1H | ☐ |
-| R23 | EOD secret reports per barber (daily + monthly on 1st) + owner summary (§4C) | 1H | ☐ |
-| R24 | Escalations table + instant Master notify + [Block]/[Monitor] (§4E) | 1G | ☐ |
-| R25 | ALL bot interactions buttons, not typed commands (§5) | every bot task | ☐ |
-| R26 | Web auth: email/password Supabase, no Telegram login (Ph2-A) | 2 (T2.2) | ☐ |
-| R27 | Public read-only queue URL for TV + customer phones (Ph2-A) | 2 (T2.6) | ☐ |
-| R28 | Tablet UX: touch-first 60px, minimal typing, dark mode, Realtime (Ph2-B) | 2 (DESIGN_SYSTEM) | ☐ |
-| R29 | Live Queue Board: 3 columns + Start/Reminder/No-show/Checkout (Module 1) | 2 (T2.3) | ☐ |
-| R30 | POS modal: services multi-select → tip → cash/card+slip → split flash (Module 2) | 2 (T2.4) | ☐ |
-| R31 | Owner analytics: today metrics, barber table, retention widget, advance mgmt (Module 3) | 2 (T2.5) | ☐ |
-| R32 | Public display mode: tokens only, zero financial/personal data (Module 4) | 2 (T2.6) | ☐ |
-| R33 | Platform owner dashboard: onboarding + manage full business (Ph3) | 3 (all) | ☐ |
-| R34 | **Future appointments** (owner decision 2026-07-16): slots, promotion to queue, reminders | 1C | ☐ |
-| R35 | **Phone capture** via Telegram contact share, skippable (owner decision) | 1B | ☐ |
-| R36 | Production deploy: VPS + Docker Compose + TLS + backups + monitoring + runbook | 4 (all) | ☐ |
+| FND-01 | Locked FastAPI foundation with validated/redacted configuration, PostgreSQL/Redis clients, health endpoints, and request IDs | Ruff, mypy, pytest, audit, HTTP smoke | verified |
+| FND-02 | Celery uses Redis, JSON serializers, bounded task execution, and a real health worker | Unit/config tests plus live broker/worker test | verified |
+| FND-03 | Both Next.js foundations use strict checks, Supabase SSR, server-side protected layouts, safe environment validation, and security headers | Lint, type, tests, builds, runtime header/auth smoke | verified |
+| FND-04 | CI definitions use locked installs, dependency/secret checks, read-only permissions, and SHA-pinned Actions | Local workflow inspection plus remote runs | built |
+| FND-05 | Secret scratch files are ignored and current/history/bundle scans are clean | Ignore rules and scanner evidence | verified |
+| FND-06 | Every credential reported in the local owner token scratch file is revoked and replaced | Owner rotation confirmation | planned |
+| FND-07 | Every phase has a dated security audit with no unresolved Critical/High finding | Audit notes and phase gate | built |
 
-## Open questions
+`built` foundation rows still have missing operational proof. Phase 0 does not complete until FND-04, FND-06, and FND-07 receive their remaining evidence.
 
-- Guardrail canned reply: English-only exact sentence vs localized translations (default: exact English; AI_SPEC §4).
+## Tenant and identity
 
-Resolved 2026-07-16: frontend hosting = Vercel from GitHub for both dashboards (owner decision D13, MASTER_PLAN).
+| ID | Requirement | Verification | Status |
+|---|---|---|---|
+| TEN-01 | One business has one primary owner and one or more shops | Schema + owner onboarding E2E | verified |
+| TEN-02 | Owner sees aggregate business data and every owned shop | API/RLS integration tests | verified |
+| TEN-03 | Staff, customers, services, queue, bookings, POS, shifts, bots, advances, and payouts are shop-scoped | Cross-shop matrix tests | planned |
+| TEN-04 | A staff user may have explicit memberships in one or more shops; no access is inferred from a request parameter | Auth-context tests | verified |
+| TEN-05 | Platform admin access is global, server-authorized, and audited | Privilege/audit plus suspended-tenant surface tests | verified |
+| TEN-06 | One customer visiting two shops has two isolated shop profiles | Composite tenant constraints + reconstructed RLS tests | verified |
+| TEN-07 | Supabase access JWTs are verified by current JWKS, issuer, audience, expiry, and not-before; authorization uses only the UUID subject | Cryptographic JWT tests + malformed/expired matrix | verified |
+| TEN-08 | Platform-admin onboarding atomically creates the application profile, business ownership, initial shop, subscription, initial cash receipt, audit, and outbox with idempotent replay | Concurrent + rollback database integration tests | verified |
 
-## Out of scope (owner spec silent / explicitly deferred — MASTER_PLAN §8)
+## SaaS commercial operations
 
-Online payments, customer web accounts, SMS/WhatsApp, inventory/loyalty/broadcasts, Arabic web UI, multi-currency.
+| ID | Requirement | Verification | Status |
+|---|---|---|---|
+| SUB-01 | Business selects exactly one billing mode: business-wide or per-shop | DB constraint + service tests | verified |
+| SUB-02 | Cash receipt captures amount, collector, receipt reference, inclusive `paid_until`, evidence note, and audit entry | API/integration tests | verified |
+| SUB-03 | Expiry occurs at 00:05 on the day after `paid_until` in Asia/Dubai; no grace period | Clock-boundary + worker concurrency tests | verified |
+| SUB-04 | Expired/manual/security suspension blocks all tenant operations and returns HTTP 423 to authenticated APIs | Reconstructed DB API/bot/public surface matrix | verified |
+| SUB-05 | Bots acknowledge valid webhooks but only show a generic unavailable reply during suspension | Middleware unit + reconstructed DB integration tests; transport verification remains Phase 3 | verified |
+| SUB-06 | Public page shows a generic suspension screen without billing details | API/privacy contract and production build pass; Playwright visual matrix remains Phase 4 | built |
+| SUB-07 | Platform admin can collect, suspend, resume, export, and offboard while tenant is blocked | Reconstructed PostgreSQL API/service lifecycle tests | verified |
+| SUB-08 | Resume after non-payment requires valid paid coverage | Service/database integration tests | verified |
+| SUB-09 | Offboarding is export-first, revokes sessions, disables tenant surfaces, and soft-archives data | Reconstructed lifecycle, entitlement, bot/public, and audit assertions | verified |
+| SUB-10 | Export is versioned, checksummed, access-controlled, and includes documented table/field coverage | Archive restore/inspection, checksum, authorization, expiry, and allowlist tests | verified |
+
+## Booking, queue, and customer operations
+
+| ID | Requirement | Verification | Status |
+|---|---|---|---|
+| BKG-01 | Queue, appointments, and walk-ins use a validated state machine | Pydantic, SQL transition, terminal-state, and API tests | verified |
+| BKG-02 | Bookings support multiple services with price/duration snapshots | Immutable snapshot integration/RLS tests | verified |
+| BKG-03 | Shop hours, closures, barber schedules, and leave determine appointment availability | Calendar plus deterministic availability fixtures | verified |
+| BKG-04 | PostgreSQL prevents overlapping active appointments for the same barber | GiST constraint plus parallel transaction test | verified |
+| BKG-05 | Five-minute slot holds prevent double booking and expire safely | Clock, worker, and replacement concurrency tests | verified |
+| BKG-06 | “Any barber” assignment is deterministic and auditable | Active-work-count and stable UUID tie-break fixture | verified |
+| BKG-07 | Appointments promote to live queue at T-30 minutes idempotently | Worker and outbox replay tests | verified |
+| BKG-08 | Queue numbers are allocated in PostgreSQL, unique per shop/business date | Parallel allocation and Redis-independence test | verified |
+| BKG-09 | Public queue exposes tokens/status/estimate only, no customer names or other PII | Contract/privacy tests | planned |
+| BKG-10 | Optional Telegram contact-share captures phone on first booking; absence does not block booking | Bot flow tests | planned |
+
+## POS, tax, cash, commission, and payroll
+
+| ID | Requirement | Verification | Status |
+|---|---|---|---|
+| POS-01 | Multi-service checkout stores immutable item, pricing, discount, VAT, barber, and legal-detail snapshots | Golden receipt tests | planned |
+| POS-02 | Cash, card with slip reference, and split tender reconcile to transaction gross total | Table-driven tests | planned |
+| POS-03 | Sequential receipt number is unique per shop and safe under concurrency | Parallel checkout test | planned |
+| POS-04 | VAT/TRN configuration supports non-registered and registered shops and renders required invoice fields | Full/simplified tax-invoice and non-VAT receipt profiles plus effective server selection verified; rendered checkout snapshot follows in T2.4 | built |
+| POS-05 | Completed sales are corrected by void/refund/credit note, never edited | API/ledger tests | planned |
+| POS-06 | Cash shifts reconcile opening float, cash sales/movements, expected, counted, and variance | T2.3 RLS/lifecycle/concurrency E2E and database aggregate guard; checkout cash-sale linkage follows in T2.4 | built |
+| MON-01 | Fixed percentage commission works from net-after-discount, excluding VAT and tips | Immutable fixed-rule source built; calculation tests follow in T2.4 | built |
+| MON-02 | Tier/threshold commission supports flat amount, including AED 120 → barber 25/shop 95 | SQL tier validation and locked AED 120 rule shape built; calculation fixture follows in T2.4 | built |
+| MON-03 | Tips are 100% barber and recorded separately | Ledger tests | planned |
+| MON-04 | Effective-dated immutable commission rules and transaction snapshots preserve history | Non-overlap/immutability source tests built; checkout snapshots follow in T2.4 | built |
+| MON-05 | Rounding is half-up to fils; any remainder goes to shop; split always reconciles | Property tests | planned |
+| MON-06 | Advance grant creates one disbursement and one outstanding balance, not a negative earning | Ledger tests | planned |
+| MON-07 | Advance deduction occurs once at payout and cannot exceed allowed outstanding/payable balance | Concurrency/reconciliation tests | planned |
+| MON-08 | Payout run records gross earnings, deductions, adjustments, net, approval, and payment | Payout E2E | planned |
+| MON-09 | Every money mutation is atomic, idempotent, role-gated, and audited | Failure-injection tests | planned |
+
+## Telegram and AI
+
+| ID | Requirement | Verification | Status |
+|---|---|---|---|
+| BOT-01 | Four bots per shop: customer, receptionist, barber crew, owner; one global master bot | Registry/onboarding tests | planned |
+| BOT-02 | Customer bot supports EN/AR/HI/UR; staff/web surfaces are English in first release | Catalog coverage tests | planned |
+| BOT-03 | All required flows have button paths; AI outage degrades to buttons | Bot E2E | planned |
+| BOT-04 | Staff bot authorization resolves bot → shop → active membership on every update | Security tests | planned |
+| BOT-05 | Outbox makes notifications retryable without duplicates | Worker/idempotency tests | planned |
+| AI-01 | AI only extracts intent and invokes allowlisted customer/booking tools | Tool contract tests | planned |
+| AI-02 | Tenant/customer context is injected server-side; model cannot choose IDs | Adversarial tests | planned |
+| AI-03 | Guardrail runs before model; unsafe input produces canned response and escalation | Adversarial tests | planned |
+| AI-04 | Price, wait, position, availability, and booking confirmations come only from tool results | Hallucination test set | planned |
+
+## Frontends and platform operations
+
+| ID | Requirement | Verification | Status |
+|---|---|---|---|
+| WEB-01 | Shop dashboard opens to authorized context, supports business aggregate for owner, and shop switcher | Playwright role matrix | planned |
+| WEB-02 | Reception/POS controls are touch-first and only operate on selected authorized shop | Playwright + API auth tests | planned |
+| WEB-03 | Frontend mutations use FastAPI; Supabase client access is read/Realtime only | Static check + network E2E | planned |
+| WEB-04 | Suspension/archive states replace operational UI consistently | Server shell and neutral contract mapping built; Playwright product matrix remains Phase 4 | built |
+| ADM-01 | Platform dashboard is business-first and manages shops beneath a business | Admin E2E | planned |
+| ADM-02 | Platform dashboard records cash subscription receipts and shows due/expired status | Admin E2E | planned |
+| ADM-03 | Platform dashboard performs audited suspend/resume/export/offboarding | Admin E2E | planned |
+| ADM-04 | Health page covers API, worker, database, Redis, outbox, and all registered bots | Fault-injection test | planned |
+
+## Production, privacy, and operations
+
+| ID | Requirement | Verification | Status |
+|---|---|---|---|
+| OPS-01 | Exact-origin CORS, secure headers, verified JWTs, RLS on every table, no direct tenant mutation | Security suite | planned |
+| OPS-02 | Logs/traces/metrics are structured, redact PII/secrets, and carry request/tenant correlation IDs | Log inspection | planned |
+| OPS-03 | Database backups achieve RPO ≤ 15 minutes and restore drill achieves RTO ≤ 4 hours | Timed restore record | planned |
+| OPS-04 | Load test supports 50 active shops, 200 shop bots, and one master bot at agreed traffic profile | Load report | planned |
+| OPS-05 | Dependency, secret, migration, unit, integration, E2E, accessibility, and security checks run in CI | Protected-branch evidence | planned |
+| OPS-06 | UAE VAT invoice/record-retention and e-invoicing readiness are documented and reviewed before launch | Compliance checklist | planned |
+| OPS-07 | Privacy notice, lawful-purpose data map, export/anonymization workflow, and incident runbook exist | Owner sign-off | planned |
+| OPS-08 | Authenticated, privileged platform, and public routes use distributed rate limits that fail closed when Redis is unavailable | Redis limiter unit tests plus production fault injection | built |
+
+## Deferred
+
+Online payment gateway, WhatsApp/SMS, customer web accounts, inventory/product sales, loyalty, marketing broadcasts, multiple primary/co-owners, multi-currency, and Arabic/RTL web UI.

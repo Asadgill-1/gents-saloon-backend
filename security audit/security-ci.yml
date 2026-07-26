@@ -1,0 +1,81 @@
+# Security CI gate — the L2 loop from SECURITY.md, run on every push and PR.
+#
+# Install:  copy this file to  .github/workflows/security-ci.yml  in your repo.
+# A red job BLOCKS the merge (make it a required status check in branch protection — S15.7).
+# Tune paths, and add app-side jobs (the RLS check needs DB creds → live in the app test suite, not here).
+
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# S15.2 — least-privilege token: read-only by default.
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: "S1 / S15.1 — secret scan (full history)"
+    runs-on: ubuntu-latest
+    steps:
+      # Pin actions to a full SHA in your repo (S15.3). Tag shown for readability — replace with the SHA.
+      - uses: actions/checkout@v4          # -> pin to a 40-char SHA
+        with:
+          fetch-depth: 0                   # full history so a secret in an old commit is caught
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2  # -> pin to a 40-char SHA
+
+  grep-guards:
+    name: "S2/S3/S4/S5/S11 — VERIFY greps"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4          # -> pin to a 40-char SHA
+      - name: S3.2 no eval/exec/pickle/shell=True
+        run: |
+          if grep -rnE "eval\(|exec\(|pickle\.load|yaml\.load\(|os\.system|shell=True|child_process\.exec\(" \
+             --include='*.py' --include='*.js' --include='*.ts' . \
+             | grep -v -E "test|spec|node_modules|\.venv"; then
+            echo "::error::S3.2 dangerous primitive found"; exit 1; fi
+      - name: S11.1 celery no pickle serializer
+        run: |
+          if grep -rniE "(accept_content|task_serializer|result_serializer).*pickle" \
+             --include='*.py' . | grep -v -E "test|node_modules|\.venv"; then
+            echo "::error::S11.1 pickle serializer = RCE"; exit 1; fi
+      - name: S2.3 no USING(true) RLS
+        run: |
+          if grep -rniE "USING\s*\(\s*true\s*\)" --include='*.sql' .; then
+            echo "::error::S2.3 USING(true) RLS theater"; exit 1; fi
+      - name: S4.2 no unverified JWT decode
+        run: |
+          if grep -rnE "verify_signature\s*=\s*False|algorithms\s*=\s*\[[\"' ]*none" \
+             --include='*.py' --include='*.js' --include='*.ts' . | grep -v -E "test|node_modules"; then
+            echo "::error::S4.2 JWT signature not verified"; exit 1; fi
+      - name: S4.4 no tokens in web storage
+        run: |
+          if grep -rniE "(localStorage|sessionStorage)\.(set|get)item.*(token|jwt|session|secret|key)" \
+             --include='*.js' --include='*.ts' --include='*.tsx' --include='*.vue' . | grep -v node_modules; then
+            echo "::error::S4.4 token in web storage"; exit 1; fi
+      - name: S5.1 flag raw-HTML sinks (non-blocking notice)
+        run: |
+          grep -rnE "dangerouslySetInnerHTML|v-html|\.innerHTML\s*=|document\.write" \
+             --include='*.js' --include='*.ts' --include='*.tsx' --include='*.vue' . \
+             | grep -v node_modules && echo "::warning::S5.1 raw-HTML sink present — confirm not user/DB data" || true
+
+  deps-audit:
+    name: "S14 — dependency audit"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4          # -> pin to a 40-char SHA
+      - name: python pip-audit (if requirements.txt)
+        run: |
+          if [ -f requirements.txt ] || [ -f backend/requirements.txt ]; then
+            pip install pip-audit
+            pip-audit -r $(ls requirements.txt backend/requirements.txt 2>/dev/null | head -1) || exit 1
+          fi
+      - name: node npm audit (if package.json)
+        run: |
+          if [ -f package.json ]; then
+            npm audit --audit-level=high || exit 1
+          fi

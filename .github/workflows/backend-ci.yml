@@ -1,0 +1,81 @@
+name: Backend CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: gents_saloon_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gents_saloon_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.26"
+          enable-cache: true
+      - run: uv sync --locked --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy app workers
+      - run: uv run pytest
+      - run: uv run pip-audit
+      - name: Reconstruct schema from forward migrations
+        env:
+          PGURL: postgresql://postgres:test-password@localhost:5432/gents_saloon_test
+        run: |
+          psql "$PGURL" -v ON_ERROR_STOP=1 -f ../supabase/tests/bootstrap_local.sql
+          shopt -s nullglob
+          for migration in ../supabase/migrations/*.sql; do
+            psql "$PGURL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql "$PGURL" -v ON_ERROR_STOP=1 -f ../supabase/tests/phase1_tenant_rls.sql
+          psql "$PGURL" -v ON_ERROR_STOP=1 -f ../supabase/tests/phase2_operations_schema.sql
+          psql "$PGURL" -v ON_ERROR_STOP=1 -f ../supabase/tests/phase2_booking_rls.sql
+          psql "$PGURL" -v ON_ERROR_STOP=1 -f ../supabase/tests/phase2_legal_cash_rls.sql
+      - name: Verify application database integrations
+        env:
+          DATABASE_URL: postgresql://postgres:test-password@localhost:5432/gents_saloon_test
+          RUN_DATABASE_INTEGRATION: "1"
+        run: >-
+          uv run pytest -q
+          tests/test_context_database.py
+          tests/test_tenant_onboarding_database.py
+          tests/test_subscription_lifecycle_database.py
+          tests/test_entitlement_surfaces_database.py
+          tests/test_export_offboarding_database.py
+          tests/test_booking_database.py
+          tests/test_legal_cash_database.py

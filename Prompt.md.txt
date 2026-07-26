@@ -1,3 +1,8 @@
+HISTORICAL INPUT — DO NOT USE AS CURRENT IMPLEMENTATION STATUS
+Canonical status and next steps: START_HERE.md
+Canonical contracts: docs/MASTER_PLAN.md, docs/DATA_MODEL.md, docs/SECURITY.md, and docs/PROJECT_CONTEXT.md
+This brief predates the Business → Shops hierarchy, revised subscription/offboarding rules, corrected commission/advance accounting, and the seven-phase delivery plan.
+
 MASTER SYSTEM PROMPT & ARCHITECTURE BLUEPRINT
 Project: UAE Multi-Tenant Barbershop Bot & POS System
 1. System Architecture & Tech Stack
