@@ -29,15 +29,15 @@ This folder contains **three independent Git repositories**. Run Git checks and 
 | Shop dashboard | `saloon-shop-dashboard/` | `Asadgill-1/saloon-shop-dashboard` | Owner/shop/reception/POS frontend; Phase 4 product UI |
 | Platform dashboard | `saloon-gents-system-owner-dashboard/` | `Asadgill-1/saloon-gents-system-owner-dashboard` | Platform-owner SaaS operations frontend; Phase 5 product UI |
 
-The prior checkpoint in all three repositories was on `main`, clean, pushed, and synchronized with its remote:
+All three repositories are on `main`, clean, pushed, and synchronized with their remotes at the T2.4 checkpoint:
 
-- backend/canonical docs: `c511eca777a13713df5a2e05b1af458e6a1d77d0`;
-- shop dashboard: `9b25b124ebcb0eae3763daa6185176900942bfe2`;
-- platform dashboard: `b22ee5bc710397751b1db93e506b2b947dd89e58`.
+- backend/canonical docs: `f02928bd4c3c5c5f9a1c1d838a1b6ea089de2146`;
+- shop dashboard: `34b6aeddb30488a042974d623edd6d327603dded`;
+- platform dashboard: `cc447a14a545eca2fe8ecc0fb73124948abf4cd5`.
 
 The matching GitHub Actions runs passed in all three repositories. Preserve unrelated future owner changes and inspect each repository independently before staging.
 
-The T2.4 checkout/journal implementation and these synchronized handoff updates are the current local change set after those hashes; they have not been committed or pushed at this checkpoint. This is new Phase 2 work, not the resolved pre-Phase 1 uncommitted-delivery risk. Both T2.4 Supabase migrations are already applied remotely and locally use the matching remote versions `20260726092654` and `20260726094355`.
+The T2.4 checkout/journal implementation and synchronized handoff updates are included in those pushed commits. Both T2.4 Supabase migrations are applied remotely and locally use the matching remote versions `20260726092654` and `20260726094355`.
 
 ## 3. Current delivery status
 
