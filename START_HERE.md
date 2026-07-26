@@ -29,15 +29,15 @@ This folder contains **three independent Git repositories**. Run Git checks and 
 | Shop dashboard | `saloon-shop-dashboard/` | `Asadgill-1/saloon-shop-dashboard` | Owner/shop/reception/POS frontend; Phase 4 product UI |
 | Platform dashboard | `saloon-gents-system-owner-dashboard/` | `Asadgill-1/saloon-gents-system-owner-dashboard` | Platform-owner SaaS operations frontend; Phase 5 product UI |
 
-All three repositories are on `main`, pushed, synchronized with their remotes, and green in GitHub Actions at the last committed T2.5 checkpoint:
+All three repositories are on `main`, pushed, synchronized with their remotes, and green in GitHub Actions at the T2.6 implementation/status checkpoint:
 
-- backend/canonical docs: `8ae961c`;
-- shop dashboard: `be9b180`;
-- platform dashboard: `8c73502`.
+- backend/canonical docs: `324caec`;
+- shop dashboard: `18bebed`;
+- platform dashboard: `2a44700`.
 
 The matching GitHub Actions runs passed in all three repositories. Preserve unrelated future owner changes and inspect each repository independently before staging.
 
-The T2.5 correction implementation and synchronized dashboard status updates are included in those pushed commits. T2.6 backend/schema/tests and the three repositories' handoff-document updates are currently local and uncommitted. Preserve this work and inspect each repository's status before staging. Remote migration `20260726115339_advance_payout_settlement` is already applied to the project-scoped Supabase development project; its matching local forward migration is `supabase/migrations/20260726113101_advance_payout_settlement.sql`.
+The T2.6 backend/schema/tests and synchronized dashboard status updates are included in those pushed commits, and all matching workflows passed. Remote migration `20260726115339_advance_payout_settlement` is applied to the project-scoped Supabase development project; its matching local forward migration is `supabase/migrations/20260726113101_advance_payout_settlement.sql`.
 
 ## 3. Current delivery status
 
@@ -328,7 +328,7 @@ Continue [Phase 2 T2.7](docs/phases/PHASE_2_OPERATIONS_MONEY.md): reports and th
 5. Do not add a provider SDK or claim UAE production accreditation until the owner selects an accredited service provider and the current legal contract is revalidated.
 6. Add RLS/IDOR, pagination stability, reconciliation, high-volume, retry, and safe-export tests; finish the T2.7 security checkpoint and update every handoff document.
 
-Inherited gates remain: owner Telegram credential rotation; authenticated repository-protection evidence; live private-Storage round trip; CSP resolution/acceptance. T2.5 is committed, pushed, synchronized, and green in remote CI across all three repositories. T2.6 is complete locally and remotely but is not yet committed or pushed. Do not mark Phase 1 passed until its audit evidence is complete.
+Inherited gates remain: owner Telegram credential rotation; authenticated repository-protection evidence; live private-Storage round trip; CSP resolution/acceptance. T2.6 is committed, pushed, synchronized, and green in remote CI across all three repositories. Do not mark Phase 1 passed until its audit evidence is complete.
 
 To restart the already-proven native dependencies:
 
