@@ -9,6 +9,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
 from app.api.bookings import router as bookings_router
+from app.api.checkout import router as checkout_router
 from app.api.context import router as context_router
 from app.api.health import router as health_router
 from app.api.legal_cash import router as legal_cash_router
@@ -79,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(context_router)
     app.include_router(bookings_router)
+    app.include_router(checkout_router)
     app.include_router(legal_cash_router)
     app.include_router(platform_tenants_router)
     app.include_router(platform_subscriptions_router)

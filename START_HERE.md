@@ -2,9 +2,9 @@
 
 Last updated: **2026-07-26, Asia/Dubai**
 
-Checkpoint: **PHASE2-LEGAL-CASH-2026-07-26**
+Checkpoint: **PHASE2-CHECKOUT-JOURNAL-2026-07-26**
 
-Current phase: **Phase 2 — T2.0–T2.3 complete; T2.4 checkout/payments/commission next**
+Current phase: **Phase 2 — T2.0–T2.4 complete; T2.5 void/refund/credit-note reversal next**
 
 This is the authoritative restart document for a new human, LLM, or AI coding agent. Read it before planning or changing code.
 
@@ -29,15 +29,23 @@ This folder contains **three independent Git repositories**. Run Git checks and 
 | Shop dashboard | `saloon-shop-dashboard/` | `Asadgill-1/saloon-shop-dashboard` | Owner/shop/reception/POS frontend; Phase 4 product UI |
 | Platform dashboard | `saloon-gents-system-owner-dashboard/` | `Asadgill-1/saloon-gents-system-owner-dashboard` | Platform-owner SaaS operations frontend; Phase 5 product UI |
 
-All three are currently on `main` with substantial uncommitted Phase 0/1/2 work. Do not discard, reset, overwrite, stage, commit, or push existing changes without explicit owner authorization.
+The prior checkpoint in all three repositories was on `main`, clean, pushed, and synchronized with its remote:
+
+- backend/canonical docs: `c511eca777a13713df5a2e05b1af458e6a1d77d0`;
+- shop dashboard: `9b25b124ebcb0eae3763daa6185176900942bfe2`;
+- platform dashboard: `b22ee5bc710397751b1db93e506b2b947dd89e58`.
+
+The matching GitHub Actions runs passed in all three repositories. Preserve unrelated future owner changes and inspect each repository independently before staging.
+
+The T2.4 checkout/journal implementation and these synchronized handoff updates are the current local change set after those hashes; they have not been committed or pushed at this checkpoint. This is new Phase 2 work, not the resolved pre-Phase 1 uncommitted-delivery risk. Both T2.4 Supabase migrations are already applied remotely and locally use the matching remote versions `20260726092654` and `20260726094355`.
 
 ## 3. Current delivery status
 
 | Phase | Status | Meaning |
 |---|---|---|
-| Phase 0 — foundation | **Locally complete; remote gates open** | Owner credential rotation and GitHub evidence remain |
+| Phase 0 — foundation | **Implementation and CI verified; owner gates open** | Credential rotation and GitHub repository-protection evidence remain |
 | Phase 1 — tenant and SaaS platform | **Implementation complete; audit open** | T1.0–T1.6 locally verified; T1.7 cannot pass yet |
-| Phase 2 — booking, POS, and money | **In progress by owner direction** | T2.0–T2.3 complete; checkout/payments/commission next |
+| Phase 2 — booking, POS, and money | **In progress by owner direction** | T2.0–T2.4 complete; void/refund/credit-note reversal next |
 | Phase 3 — Telegram and AI | Not started | Depends on Phase 1–2 services/outbox |
 | Phase 4 — shop dashboard | Not started | Only the technical Next.js foundation exists |
 | Phase 5 — platform dashboard | Not started | Only the technical Next.js foundation exists |
@@ -157,6 +165,16 @@ All three are currently on `main` with substantial uncommitted Phase 0/1/2 work.
 - Owner, manager, receptionist, and platform admin may operate cash after an in-transaction entitlement recheck. Barbers cannot read cash/counters through RLS or operate the APIs. Browser writes are absent; every mutation is idempotent and writes audit/outbox in the same commit.
 - Parallel receipt allocation produces unique sequences; parallel open attempts for one register produce one winner; same-key open/close replay returns one durable result. The clean reconstruction/RLS/concurrency suite passes.
 
+### Phase 2 checkout, payments, commission snapshots, and journal
+
+- `POST /api/v1/businesses/{business_id}/shops/{shop_id}/pos/checkout` completes an existing `completed` booking. Counter sales use the same path through a walk-in booking, avoiding a second financial mutation flow.
+- The server derives customer, barber, service price, legal/VAT profile, and effective commission rule from PostgreSQL. The request may provide only booking-service discounts, cash/card tender, a separate tip, and the open cash shift required for cash.
+- Decimal-only, half-up calculations support VAT-inclusive and VAT-exclusive pricing, line discounts, split tender, and exact header reconciliation. Tips are separate and 100% barber. The AED 120 tier fixture produces barber AED 25 and shop AED 95.
+- One transaction allocates the receipt, writes immutable transaction/item/payment/commission snapshots, records only the cash tender in the cash shift, creates a balanced double-entry journal, and completes idempotency, audit, and outbox.
+- Commission snapshots live in a separate restricted table: receptionists can read operational receipt/payment data but not commission; a barber can read only their own commission; managers, owners, and platform administrators retain the approved views.
+- Deferred PostgreSQL checks independently require item/header/payment/commission reconciliation, an open shift for cash, at least two journal postings, and equal positive debits and credits. Completed financial rows reject update/delete.
+- Clean reconstruction, RLS/IDOR, exact-calculation, parallel same-key checkout, replay, golden journal, cash-linkage, forbidden authority/PAN input, and append-only tests pass.
+
 ### Both Next.js foundations plus T1.5 authorization shells
 
 - Next.js 16, React 19, Tailwind 4, strict TypeScript, ESLint, lockfiles, and SHA-pinned CI.
@@ -173,9 +191,9 @@ All three are currently on `main` with substantial uncommitted Phase 0/1/2 work.
 - Backend and both frontend full dependency audits are clean. The dashboards use Next's documented direct `@next/eslint-plugin-next` flat-config path, TypeScript ESLint, and React Hooks rules; this removed the vulnerable legacy lint dependency chain without weakening CI.
 - Built frontend bundles contain no checked backend-secret names.
 - Static checks found no unsafe serializer, dangerous Python execution, wildcard CORS, unverified JWT decode, browser token storage, or raw-HTML sink.
-- Project-scoped Supabase OAuth MCP is authenticated; eleven migrations are applied, all 30 application tables remain empty/RLS-enabled, and Security Advisor has zero findings.
+- Project-scoped Supabase OAuth MCP is authenticated; thirteen migrations are applied and all 37 public application tables are forced-RLS-enabled. The only remote rows are eight controlled `journal_accounts` references; tenant and transaction tables remain empty. Security Advisor has zero findings.
 - A dated security audit is now mandatory after every phase.
-- The Phase 1 audit found missing distributed throttling as High and fixed it. The audit remains not passed because inherited credential rotation, remote GitHub/CI evidence, and the live Storage round trip are open.
+- The Phase 1 audit found missing distributed throttling as High and fixed it. The audit remains not passed because inherited credential rotation, authenticated repository-protection evidence, and the live Storage round trip are open.
 
 ## 5. Latest verified evidence
 
@@ -186,7 +204,7 @@ uv lock --check                     PASS
 uv run ruff check .                 PASS
 uv run ruff format --no-cache --check .  PASS
 uv run mypy app workers             PASS
-uv run pytest -q                    PASS — 50 passed, 10 DB-gated skips
+uv run pytest -q                    PASS — 55 passed, 11 DB-gated skips
 uv run pip-audit                    PASS — no known vulnerabilities
 ```
 
@@ -221,8 +239,8 @@ GET /health/live                 PASS — 200
 GET /health/ready                PASS — 200 with dependencies
 Redis stopped → readiness        PASS — 503 while PostgreSQL stayed ready
 workers.health.ping              PASS — Celery SUCCESS through real broker/worker
-Supabase application tables      PASS — 30 RLS-enabled tables, 0 rows
-Supabase migrations              PASS — 5 Phase 1 + 6 Phase 2 forward migrations
+Supabase application tables      PASS — 37 RLS-enabled tables; 8 controlled journal-account rows only
+Supabase migrations              PASS — 5 Phase 1 + 8 Phase 2 forward migrations
 Supabase Security Advisor        PASS — zero findings
 Supabase Performance Advisor     PASS — INFO-only unused indexes on empty tables
 ```
@@ -230,7 +248,7 @@ Supabase Performance Advisor     PASS — INFO-only unused indexes on empty tabl
 Phase 1/2 database:
 
 ```text
-scripts/test-database.ps1            PASS — reconstruction + RLS + 10 application database tests
+scripts/test-database.ps1            PASS — reconstruction + RLS + 11 application database tests
 Remote migrations                    PASS — tenant core, FK indexes, deny policies, entitlement and export/offboarding hardening
 Remote Security Advisor              PASS — 0 findings
 Remote Performance Advisor           PASS — INFO-only unused indexes on empty tables
@@ -240,7 +258,7 @@ Private tenant-exports bucket        PASS — private, ZIP-only, 100 MB, no brow
 Live Storage object round trip       OPEN — backend service-role runtime secret not provisioned
 Phase 2 operations SQL suite         PASS — catalog/customer/calendar/legal/commission constraints and RLS
 Remote Phase 2 migrations            PASS — operations source schema + calendar time hardening
-Remote public tables/RLS             PASS — 30/30, 0 rows
+Remote public tables/RLS             PASS — 37/37; tenant/transaction rows 0
 Remote browser mutation policies     PASS — 0
 Remote missing FK indexes            PASS — 0
 Phase 2 booking RLS/concurrency       PASS — holds, queue, allocation, worker, reschedule
@@ -249,6 +267,9 @@ Remote booking browser mutations      PASS — 0 policies/privileges
 Phase 2 legal/cash RLS/concurrency    PASS — legal snapshots, counters, shift lifecycle/reconciliation
 Remote legal/cash migrations          PASS — document type hardening + legal cash shifts
 Remote legal/cash browser mutations   PASS — 0 policies/privileges
+Phase 2 checkout RLS/concurrency      PASS — totals, split tender, commission, cash, journal, replay
+Remote checkout migrations            PASS — 20260726092654 journal + 20260726094355 FK index hardening
+Remote checkout browser mutations     PASS — 0 policies/privileges
 ```
 
 Workstation cleanup note:
@@ -265,7 +286,7 @@ Windows no longer exposes PID 11696 through `Get-Process`, CIM, or `tasklist`, s
 ## 6. Open blockers — do not call Phase 0 complete
 
 1. **Critical owner action:** revoke and replace the four Telegram bot credentials detected in local `tokkens.txt`. Values were not printed or committed. Follow [the rotation runbook](docs/SECRET_ROTATION_RUNBOOK.md).
-2. **Remote:** Phase 0 changes are not committed/pushed and GitHub CI has not run. A read-only public check still shows only the three original commits in each repository. GitHub CLI is not installed on this workstation, and unauthenticated public pages cannot prove branch protection, required checks, secret scanning, or push protection.
+2. **Remote repository controls:** all three repositories are committed, pushed, and green in GitHub Actions. Branch protection, required-check enforcement, GitHub secret scanning, and push protection still require authenticated settings evidence.
 3. **Medium security follow-up:** replace the current framework-compatible inline-script CSP with nonce/hash CSP during Phase 4/5, before production.
 4. **Development MCP acceptance:** the owner explicitly requested full-write Supabase MCP access. It is project-scoped and the project is empty; switch to read-only mode or a development branch before production data exists.
 5. **Next.js MCP:** `next-devtools-mcp@0.4.0` was evaluated and removed because it introduced unresolved High npm advisories. Do not install it until an audited fixed release exists. A custom product MCP is not needed unless an approved external AI client later requires scoped platform access.
@@ -273,16 +294,16 @@ Windows no longer exposes PID 11696 through `Get-Process`, CIM, or `tasklist`, s
 
 ## 7. Exact next starting point
 
-Continue [Phase 2 T2.4](docs/phases/PHASE_2_OPERATIONS_MONEY.md): checkout, payments, and commission snapshots.
+Continue [Phase 2 T2.5](docs/phases/PHASE_2_OPERATIONS_MONEY.md): void, refund, credit note, and journal reversal.
 
-1. Expand the T2.4 task into exact transaction/item/payment/journal files and failure cases before coding.
-2. Add forward schema for immutable completed transactions, item/payment snapshots, and the balanced journal event needed by checkout.
-3. Implement Decimal-only inclusive/exclusive VAT, discount, per-line fils rounding, effective commission selection, split cash/card tender, and separate 100% barber tips.
-4. Atomically allocate the T2.3 sale number and connect cash payment only to an open shift; card must never alter physical expected cash.
-5. Reauthorize the operator and entitlement inside the transaction; require idempotency, audit, outbox, and server-selected legal/service/commission facts.
-6. Prove golden calculations, the AED 120 → barber 25/shop 95 fixture, parallel same-key checkout, and client-total/price/VAT authority rejection.
+1. Expand T2.5 into exact correction tables, state transitions, permissions, and same-shift void policy before coding.
+2. Add forward-only schema for refund headers/items/payments and links to the original transaction, credit-note counter, and reversing journal entry.
+3. Bound partial/full refunds by the original immutable item quantity/value minus prior corrections; serialize concurrent corrections.
+4. Reverse revenue, VAT, barber payable/commission, tip payable, cash/card settlement, and journal postings without editing the original receipt.
+5. Require idempotency, in-transaction authorization/entitlement, audit, outbox, and an open matching shift for any physical cash return.
+6. Prove duplicate/parallel refunds cannot over-refund and original plus all corrections reconcile exactly.
 
-Inherited gates remain: owner Telegram credential rotation; commits/pushes and remote CI/repository protections; live private-Storage round trip; CSP resolution/acceptance. Do not mark Phase 1 passed until its audit evidence is complete.
+Inherited gates remain: owner Telegram credential rotation; authenticated repository-protection evidence; live private-Storage round trip; CSP resolution/acceptance. Commits, pushes, and remote CI are complete and green. Do not mark Phase 1 passed until its audit evidence is complete.
 
 To restart the already-proven native dependencies:
 

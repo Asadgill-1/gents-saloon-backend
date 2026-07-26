@@ -66,6 +66,7 @@ jobs:
           psql "$PGURL" -v ON_ERROR_STOP=1 -f ../supabase/tests/phase2_operations_schema.sql
           psql "$PGURL" -v ON_ERROR_STOP=1 -f ../supabase/tests/phase2_booking_rls.sql
           psql "$PGURL" -v ON_ERROR_STOP=1 -f ../supabase/tests/phase2_legal_cash_rls.sql
+          psql "$PGURL" -v ON_ERROR_STOP=1 -f ../supabase/tests/phase2_checkout_rls.sql
       - name: Verify application database integrations
         env:
           DATABASE_URL: postgresql://postgres:test-password@localhost:5432/gents_saloon_test
@@ -79,3 +80,4 @@ jobs:
           tests/test_export_offboarding_database.py
           tests/test_booking_database.py
           tests/test_legal_cash_database.py
+          tests/test_checkout_database.py

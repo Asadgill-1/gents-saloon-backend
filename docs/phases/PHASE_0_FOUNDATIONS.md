@@ -11,7 +11,7 @@
 - Verified live through the project-scoped Supabase MCP: no application tables, project migrations, Edge Functions, security advisor findings, or performance advisor findings exist before Phase 1.
 - Verified locally: credential-pattern scans found no matches in current project files (excluding the intentionally untracked owner token scratch file) or any of the three Git histories.
 - Ponytail ledger: no source-code `ponytail:` debt markers.
-- Security audit: rerun and recorded in [../security-audits/PHASE_0_2026-07-25.md](../security-audits/PHASE_0_2026-07-25.md). The audit is not passed while token rotation and remote-CI/repository-control evidence remain open.
+- Security audit: rerun and recorded in [../security-audits/PHASE_0_2026-07-25.md](../security-audits/PHASE_0_2026-07-25.md). Commits, pushes, and remote CI are complete and green. The audit is not passed while token rotation and authenticated repository-protection evidence remain open.
 - Deferred security: Next.js DevTools MCP `0.4.0` currently introduces unresolved high-severity npm audit findings through its pinned MCP SDK. Do not install or activate it until an audited fixed release is available. A custom product MCP is unnecessary until an approved external AI client needs scoped platform access.
 - Fixed security finding P0-SEC-010: replaced the vulnerable `eslint-config-next` convenience chain with Next's documented direct ESLint plugin flat config plus TypeScript ESLint and React Hooks rules.
 - Pending owner: revoke/replace every Telegram token in `tokkens.txt`.

@@ -65,21 +65,21 @@ Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the
 
 | ID | Requirement | Verification | Status |
 |---|---|---|---|
-| POS-01 | Multi-service checkout stores immutable item, pricing, discount, VAT, barber, and legal-detail snapshots | Golden receipt tests | planned |
-| POS-02 | Cash, card with slip reference, and split tender reconcile to transaction gross total | Table-driven tests | planned |
-| POS-03 | Sequential receipt number is unique per shop and safe under concurrency | Parallel checkout test | planned |
-| POS-04 | VAT/TRN configuration supports non-registered and registered shops and renders required invoice fields | Full/simplified tax-invoice and non-VAT receipt profiles plus effective server selection verified; rendered checkout snapshot follows in T2.4 | built |
+| POS-01 | Multi-service checkout stores immutable item, pricing, discount, VAT, barber, and legal-detail snapshots | Golden receipt and database reconciliation tests pass | verified |
+| POS-02 | Cash, card with slip reference, and split tender reconcile to transaction gross total | Cash/card split and payment-total tests pass; PAN-like references rejected | verified |
+| POS-03 | Sequential receipt number is unique per shop and safe under concurrency | Parallel same-key checkout produces one receipt/transaction | verified |
+| POS-04 | VAT/TRN configuration supports non-registered and registered shops and renders required invoice fields | Full/simplified tax-invoice and non-VAT profiles plus immutable checkout legal snapshot verified | verified |
 | POS-05 | Completed sales are corrected by void/refund/credit note, never edited | API/ledger tests | planned |
-| POS-06 | Cash shifts reconcile opening float, cash sales/movements, expected, counted, and variance | T2.3 RLS/lifecycle/concurrency E2E and database aggregate guard; checkout cash-sale linkage follows in T2.4 | built |
-| MON-01 | Fixed percentage commission works from net-after-discount, excluding VAT and tips | Immutable fixed-rule source built; calculation tests follow in T2.4 | built |
-| MON-02 | Tier/threshold commission supports flat amount, including AED 120 → barber 25/shop 95 | SQL tier validation and locked AED 120 rule shape built; calculation fixture follows in T2.4 | built |
-| MON-03 | Tips are 100% barber and recorded separately | Ledger tests | planned |
-| MON-04 | Effective-dated immutable commission rules and transaction snapshots preserve history | Non-overlap/immutability source tests built; checkout snapshots follow in T2.4 | built |
-| MON-05 | Rounding is half-up to fils; any remainder goes to shop; split always reconciles | Property tests | planned |
+| POS-06 | Cash shifts reconcile opening float, cash sales/movements, expected, counted, and variance | Lifecycle/concurrency tests plus checkout cash-only movement linkage pass | verified |
+| MON-01 | Fixed percentage commission works from net-after-discount, excluding VAT and tips | Golden and range-invariant Decimal calculation tests pass | verified |
+| MON-02 | Tier/threshold commission supports flat amount, including AED 120 → barber 25/shop 95 | SQL validation and AED 120 → 25/95 checkout fixture pass | verified |
+| MON-03 | Tips are 100% barber and recorded separately | Separate tip snapshot and `tip_payable` journal posting pass | verified |
+| MON-04 | Effective-dated immutable commission rules and transaction snapshots preserve history | Effective rule selection and restricted immutable snapshot tests pass | verified |
+| MON-05 | Rounding is half-up to fils; any remainder goes to shop; split always reconciles | Golden and range-invariant reconciliation tests pass | verified |
 | MON-06 | Advance grant creates one disbursement and one outstanding balance, not a negative earning | Ledger tests | planned |
 | MON-07 | Advance deduction occurs once at payout and cannot exceed allowed outstanding/payable balance | Concurrency/reconciliation tests | planned |
 | MON-08 | Payout run records gross earnings, deductions, adjustments, net, approval, and payment | Payout E2E | planned |
-| MON-09 | Every money mutation is atomic, idempotent, role-gated, and audited | Failure-injection tests | planned |
+| MON-09 | Every money mutation is atomic, idempotent, role-gated, and audited | Checkout path verified; later correction/advance/payout mutations remain Phase 2 work | built |
 
 ## Telegram and AI
 

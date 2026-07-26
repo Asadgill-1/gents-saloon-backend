@@ -1,6 +1,6 @@
 # Data Model — Production Schema Contract
 
-> Target schema contract. All five Phase 1 migrations and six Phase 2 migrations through T2.3 are implemented and applied to the empty development Supabase project. Sections 5.2–5.4, 6, 7.1–7.2, 7.7, and 7.10 describe implemented schema; later money sections remain target design. Read [../START_HERE.md](../START_HERE.md) for current status.
+> Target schema contract. All five Phase 1 migrations and eight Phase 2 migrations through T2.4 are implemented and applied to the development Supabase project. Sections 5.2–5.4, 6, 7.1–7.5, 7.7, 7.10, and 7.11 describe implemented schema; refund/advance/payout sections remain target design. Read [../START_HERE.md](../START_HERE.md) for current status.
 
 Source of truth for SQL migrations. PostgreSQL/Supabase is authoritative for tenancy, subscriptions, bookings, queue numbers, money, idempotency, audit, and outbox delivery.
 
@@ -447,7 +447,8 @@ An atomic `INSERT ... ON CONFLICT DO UPDATE` acquires the counter-row lock and a
 
 ```text
 id, business_id, shop_id uuid
-booking_id, customer_id uuid NULL
+booking_id uuid NOT NULL
+customer_id uuid NULL
 barber_membership_id uuid NOT NULL
 cash_shift_id uuid NULL
 receipt_number text NOT NULL
@@ -463,27 +464,36 @@ tip_total numeric(14,2) NOT NULL
 grand_total numeric(14,2) NOT NULL
 refunded_total numeric(14,2) NOT NULL DEFAULT 0
 legal_snapshot jsonb NOT NULL
-commission_snapshot jsonb NOT NULL
 created_by_auth_user_id uuid NOT NULL
 created_at timestamptz NOT NULL
 UNIQUE (id, business_id, shop_id)
 UNIQUE (shop_id, receipt_number)
 ```
 
-Checks enforce the arithmetic identities. Completed rows are immutable.
+Checkout accepts only an existing completed booking; counter sales use a walk-in booking first. The server derives the customer, barber, legal profile, services, prices, VAT, and commission rules. Checks enforce all header arithmetic identities. Completed rows are immutable.
 
 ### 7.4 `transaction_items`
 
 Immutable line snapshots:
 
 ```text
-transaction_id, service_id, barber_membership_id
-description, quantity, unit_gross, discount, vat_rate
+transaction_id, booking_service_id, service_id, barber_membership_id
+service_name, quantity, unit_amount, pricing_mode, vat_rate
+pre_discount_gross, discount_input, discount_gross
 line_net, line_vat, line_gross
-commission_base, barber_commission, shop_share
 ```
 
-Composite foreign keys enforce same-shop ownership. Checks require line totals and commission split to reconcile.
+Composite foreign keys enforce same-shop ownership. Checks require the rounded line identities to reconcile.
+
+`transaction_item_commissions` stores the restricted immutable financial split separately:
+
+```text
+transaction_item_id, commission_rule_id
+rule_snapshot jsonb
+commission_base, barber_commission, shop_share numeric(14,2)
+```
+
+The base is item net after discount, excluding VAT and tips. Receptionists cannot read commission rows. A barber can read only their own rows; managers, business owners, and platform administrators can read the approved scope. Deferred validation requires every item to have one commission snapshot and `barber_commission + shop_share = commission_base`.
 
 ### 7.5 `transaction_payments`
 
@@ -495,7 +505,7 @@ card_slip_reference text NULL
 CHECK (method <> 'card' OR card_slip_reference IS NOT NULL)
 ```
 
-Deferred validation requires payment sum = transaction grand total.
+One row per method is allowed. Card references use a strict safe-character format and reject PAN-like 13–19 digit sequences. Deferred validation requires payment sum = transaction grand total and an open matching cash shift whenever cash tender exists.
 
 ### 7.6 Refunds and credit notes
 
@@ -520,7 +530,7 @@ created_by_membership_id uuid NOT NULL
 created_at timestamptz
 ```
 
-Rules support a shop default or barber override. Values are immutable; only the end of an effective period may be shortened. Exclusion constraints prevent overlapping periods for the same shop/default or barber override. Tier JSON permits 1–20 ordered, non-overlapping `[min_base,max_base)` bands with exactly one percentage or flat result per band; SQL validation is implemented and Python validation/calculation follows in T2.4.
+Rules support a shop default or barber override. Values are immutable; only the end of an effective period may be shortened. Exclusion constraints prevent overlapping periods for the same shop/default or barber override. Tier JSON permits 1–20 ordered, non-overlapping `[min_base,max_base)` bands with exactly one percentage or flat result per band; SQL validation and Decimal calculation are implemented.
 
 ### 7.8 `advances` and `advance_applications`
 
@@ -565,7 +575,7 @@ net_paid = gross_payable - advance_deduction
 - `cash_shift_movements`: tenant/shop/shift, type (`cash_sale`, `pay_in`, `pay_out`, `advance`, `payout`, `refund`), positive amount, manual reason or unique source entity, actor/time.
 - Only one open shift per shop/register. Shifts move once from open to closed; closed rows and all movements are immutable.
 - Expected cash is `opening + cash_sale + pay_in - pay_out - advance - payout - refund`. A database trigger recomputes this aggregate before accepting close, and `variance = counted - expected`.
-- Card is not a cash movement type and is therefore excluded from expected physical cash. T2.4 checkout will create `cash_sale` only for the cash portion of tender.
+- Card is not a cash movement type and is therefore excluded from expected physical cash. T2.4 checkout creates one `cash_sale` movement for only the cash portion of tender.
 - Authenticated browser access is read-only and RLS-filtered to platform admin, owner, manager, and receptionist. Barbers and anonymous users read none; all writes use trusted FastAPI transactions.
 
 ### 7.11 Double-entry journal
@@ -576,7 +586,7 @@ Financial truth is append-only:
 - `journal_entries`: event header, tenant, source type/id, idempotency key, actor, time.
 - `journal_postings`: account, optional barber, debit, credit; exactly one side positive.
 
-A deferred constraint trigger requires every entry to balance: `SUM(debit) = SUM(credit)`. Update/delete triggers reject changes. Reversals reference the original journal entry.
+T2.4 seeds eight controlled accounts and posts checkout debits to `cash`/`card_clearing`, with credits to `service_revenue`, `barber_payable`, `vat_payable`, and `tip_payable`. A deferred constraint trigger requires at least two postings and `SUM(debit) = SUM(credit) > 0`. Update/delete triggers reject changes. T2.5 adds linked reversing entries.
 
 ## 8. Reliability and audit
 

@@ -103,6 +103,13 @@ try {
         throw "Phase 2 legal/cash RLS tests failed."
     }
 
+    $phase2CheckoutTests = Join-Path $projectRoot "supabase\tests\phase2_checkout_rls.sql"
+    & $psql -X -w -v ON_ERROR_STOP=1 -h $postgresHost -p $postgresPort `
+        -U $postgresUser -d $testDatabase -f $phase2CheckoutTests
+    if ($LASTEXITCODE -ne 0) {
+        throw "Phase 2 checkout RLS tests failed."
+    }
+
     $integrationDatabaseUrl = $databaseUrl -replace `
         "/[^/?]+(?=(?:\?|$))", "/$testDatabase"
     $env:DATABASE_URL = $integrationDatabaseUrl
@@ -116,7 +123,8 @@ try {
             tests/test_entitlement_surfaces_database.py `
             tests/test_export_offboarding_database.py `
             tests/test_booking_database.py `
-            tests/test_legal_cash_database.py
+            tests/test_legal_cash_database.py `
+            tests/test_checkout_database.py
         if ($LASTEXITCODE -ne 0) {
             throw "Application database integration tests failed."
         }

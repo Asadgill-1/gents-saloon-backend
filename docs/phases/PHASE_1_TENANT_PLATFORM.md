@@ -2,7 +2,7 @@
 
 ## Status — 2026-07-26
 
-**Implementation complete; security gate open.** T1.0–T1.6 are implemented and locally verified. T1.7 was executed, but the [Phase 1 security audit](../security-audits/PHASE_1_2026-07-26.md) is not passed because inherited credential rotation, remote GitHub/CI evidence, and a live private-Storage round trip remain open. The owner explicitly authorized Phase 2 to proceed while these gates remain visible; do not call Phase 1 passed without the missing evidence.
+**Implementation complete; security gate open.** T1.0–T1.6 are implemented and locally verified. T1.7 was executed, but the [Phase 1 security audit](../security-audits/PHASE_1_2026-07-26.md) is not passed because inherited credential rotation, authenticated repository-protection evidence, and a live private-Storage round trip remain open. Commits, pushes, and remote CI are complete and green. The owner explicitly authorized Phase 2 to proceed while these gates remain visible; do not call Phase 1 passed without the missing evidence.
 
 - Complete: T1.0 tooling/current-doc verification and live empty-project baseline.
 - Complete: T1.1 core schema, local reconstruction, actor/RLS matrix, three forward remote migrations, and remote advisor remediation.
@@ -319,7 +319,7 @@ Result:
 - The dated audit is recorded at `docs/security-audits/PHASE_1_2026-07-26.md`.
 - A missing distributed request limit was found as High and fixed with Redis-backed atomic limits plus allow/reject/fail-closed tests.
 - No new unresolved Critical/High defect remains in the Phase 1 code.
-- The phase gate remains open for inherited credential rotation, remote CI/repository controls, and the live private-Storage round trip.
+- The phase gate remains open for inherited credential rotation, authenticated repository-protection evidence, and the live private-Storage round trip. All three repositories are committed, pushed, and green in remote CI.
 - `ponytail-audit`: lean already; no deletion/simplification finding.
 - `ponytail-debt`: no source-code markers.
 

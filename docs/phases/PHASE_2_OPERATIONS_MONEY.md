@@ -10,7 +10,8 @@ Phase 1 implementation is locally verified, but its inherited credential/remote 
 - Complete: T2.1 shop catalog, customers, calendars, legal profiles, and commission-rule source schema.
 - Complete: T2.2 booking, holds, availability, and queue.
 - Complete: T2.3 legal documents, receipt counters, and cash shifts.
-- Next: T2.4 checkout, payments, and commission snapshots.
+- Complete: T2.4 checkout, payments, commission snapshots, and balanced journal.
+- Next: T2.5 void, refund, credit note, and journal reversal.
 
 ## Outcome
 
@@ -235,6 +236,47 @@ Gates:
 - AED 120 → barber 25/shop 95 passes;
 - parallel same-key checkout creates one receipt/transaction/journal only;
 - client-supplied totals, price, VAT, barber, role, or shop authority are ignored/rejected.
+
+Implementation decisions:
+
+- checkout requires an existing completed booking; a direct counter sale first creates a walk-in booking and then uses this single financial path;
+- the server derives customer, barber, service price, legal/VAT profile, and commission rule; request authority is limited to discounts, tender, tip, and the cash shift needed for cash;
+- commission snapshots are stored separately from receipt/payment rows so receptionists cannot read commission values while a barber can read only their own;
+- cash tender posts to `cash`, card tender to `card_clearing`, and credits reconcile across service revenue, barber payable, VAT payable, and tip payable.
+
+Evidence:
+
+```text
+Decimal/golden/property contracts                 PASS
+Inclusive/exclusive VAT and discount              PASS — exact per-line fils reconciliation
+AED 120 tier fixture                              PASS — barber 25/shop 95
+Cash/card split plus separate tip                 PASS — 50/80 tender + 10 tip
+Parallel same-key checkout                        PASS — one receipt/transaction/journal/cash movement
+Idempotent replay                                 PASS — identical durable response
+Client authority and PAN-like input rejection     PASS
+Journal deferred balance/reconciliation           PASS — debit = credit, at least two postings
+Receipt/payment/commission RLS matrix              PASS — least privilege and cross-tenant denial
+Append-only completed-money guards                PASS — browser delete and backend update rejected
+Local clean reconstruction/RLS/concurrency suite  PASS — 11 application database tests
+Remote migrations                                 PASS — 20260726092654 journal + 20260726094355 FK index hardening
+Remote public tables                              PASS — 37/37 RLS-enabled
+Remote persisted data                             PASS — 8 controlled journal accounts; tenant/transaction rows 0
+Remote browser mutation policies                  PASS — 0
+Remote missing foreign-key indexes                PASS — 0
+Remote Supabase Security Advisor                  PASS — 0 findings
+Remote Performance Advisor                        INFO-only unused indexes on empty tables
+```
+
+T2.4 security checkpoint:
+
+- **Pass for this task checkpoint:** no unresolved Critical or High finding was found in the checkout change. This does not replace the mandatory dated Phase 2 audit at T2.8.
+- Authorization and active entitlement are rechecked inside the same transaction that locks the completed booking and writes money.
+- Client-supplied tenant, shop, role, barber, service price, VAT, totals, commission, or legal authority is rejected by the request contract.
+- Raw and separator-formatted PAN-like card references are rejected; CVV, expiry, and other cardholder data have no fields.
+- RLS/IDOR tests prove the receptionist/barber/manager/owner/platform matrix and deny cross-tenant access; authenticated and anonymous browser writes remain absent.
+- Current-source and five-commit-history secret scans report zero leaks. `pip-audit` reports no known dependency vulnerabilities.
+- Supabase Security Advisor reports zero findings after the migration; Performance Advisor has no non-INFO finding and the FK-index gate reports zero missing indexes.
+- The over-engineering review found no useful T2.4 deletion or dependency reduction. The debt scan added no new marker; the existing T2.2 shop-lock debt remains the single Phase 2 marker.
 
 ### T2.5 — Void, refund, credit note, and journal reversal
 
