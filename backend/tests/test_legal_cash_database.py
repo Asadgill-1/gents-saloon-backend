@@ -209,7 +209,7 @@ async def _exercise_legal_cash_contracts() -> None:
                 business_id=BUSINESS_ID,
                 shop_id=SHOP_ID,
                 cash_shift_id=shift.cash_shift_id,
-                idempotency_key="cash-after-close-0004",
+                idempotency_key="cash-after-close-0004",  # gitleaks:allow
                 request_id="cash-after-close",
                 payload=CashMovementRecord(
                     movement_type="pay_in",
@@ -240,7 +240,7 @@ async def _exercise_legal_cash_contracts() -> None:
                 actor_id=BARBER_ID,
                 business_id=BUSINESS_ID,
                 shop_id=SHOP_ID,
-                idempotency_key="cash-barber-denied-0006",
+                idempotency_key="cash-barber-denied-0006",  # gitleaks:allow
                 request_id="cash-barber-denied",
                 payload=CashShiftOpenRequest(
                     register_label="Barber Register",

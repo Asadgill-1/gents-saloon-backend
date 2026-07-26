@@ -95,7 +95,7 @@ async def test_receipt_suspend_resume_reversal_and_mode_transition() -> None:
             pool,
             actor_id=ADMIN_ID,
             receipt_id=receipt.receipt_id,
-            idempotency_key="cash-reversal-idempotent-0002",
+            idempotency_key="cash-reversal-idempotent-0002",  # gitleaks:allow
             request_id="reverse-a1",
             payload=ReceiptReversalRequest(
                 receipt_reference="PHASE1-CASH-A-001-R",
@@ -107,7 +107,7 @@ async def test_receipt_suspend_resume_reversal_and_mode_transition() -> None:
             pool,
             actor_id=ADMIN_ID,
             receipt_id=receipt.receipt_id,
-            idempotency_key="cash-reversal-idempotent-0002",
+            idempotency_key="cash-reversal-idempotent-0002",  # gitleaks:allow
             request_id="reverse-a2",
             payload=ReceiptReversalRequest(
                 receipt_reference="PHASE1-CASH-A-001-R",
