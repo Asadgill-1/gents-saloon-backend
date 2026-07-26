@@ -108,3 +108,19 @@ def calculate_commission(
         shop_share=base - barber_amount,
         applied_tier=applied_tier,
     )
+
+
+def proportional_cumulative(
+    *,
+    original_output: Decimal,
+    original_input: Decimal,
+    cumulative_input: Decimal,
+) -> Decimal:
+    source = round_fils(original_input)
+    cumulative = round_fils(cumulative_input)
+    output = round_fils(original_output)
+    if source <= 0 or cumulative < 0 or cumulative > source:
+        raise MoneyCalculationError("proportional correction is outside the original amount")
+    if cumulative == source:
+        return output
+    return round_fils(output * cumulative / source)

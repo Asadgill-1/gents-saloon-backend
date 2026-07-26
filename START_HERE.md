@@ -2,9 +2,9 @@
 
 Last updated: **2026-07-26, Asia/Dubai**
 
-Checkpoint: **PHASE2-CHECKOUT-JOURNAL-2026-07-26**
+Checkpoint: **PHASE2-CORRECTIONS-2026-07-26**
 
-Current phase: **Phase 2 — T2.0–T2.4 complete; T2.5 void/refund/credit-note reversal next**
+Current phase: **Phase 2 — T2.0–T2.5 complete; T2.6 advances/payout settlement next**
 
 This is the authoritative restart document for a new human, LLM, or AI coding agent. Read it before planning or changing code.
 
@@ -29,15 +29,17 @@ This folder contains **three independent Git repositories**. Run Git checks and 
 | Shop dashboard | `saloon-shop-dashboard/` | `Asadgill-1/saloon-shop-dashboard` | Owner/shop/reception/POS frontend; Phase 4 product UI |
 | Platform dashboard | `saloon-gents-system-owner-dashboard/` | `Asadgill-1/saloon-gents-system-owner-dashboard` | Platform-owner SaaS operations frontend; Phase 5 product UI |
 
-All three repositories are on `main`, clean, pushed, and synchronized with their remotes at the T2.4 checkpoint:
+All three repositories are on `main`, pushed, and synchronized with their remotes at the last committed T2.4 handoff checkpoint:
 
-- backend/canonical docs: `f02928bd4c3c5c5f9a1c1d838a1b6ea089de2146`;
-- shop dashboard: `34b6aeddb30488a042974d623edd6d327603dded`;
-- platform dashboard: `cc447a14a545eca2fe8ecc0fb73124948abf4cd5`.
+- backend/canonical docs: `54d4370830d57905b9b15b1ee453ca7f4593af99`;
+- shop dashboard: `eae7426ccca476ab7427ed7300ffa5941cf8aebc`;
+- platform dashboard: `fa8a58212014f7a8b2047b2b932709389fa071c9`.
 
 The matching GitHub Actions runs passed in all three repositories. Preserve unrelated future owner changes and inspect each repository independently before staging.
 
 The T2.4 checkout/journal implementation and synchronized handoff updates are included in those pushed commits. Both T2.4 Supabase migrations are applied remotely and locally use the matching remote versions `20260726092654` and `20260726094355`.
+
+The T2.5 implementation and this handoff update are local, verified changes after that pushed checkpoint and are not committed or pushed yet. Remote migrations `20260726105629_correction_credit_notes` and `20260726111301_correction_void_tender_hardening` are already applied to the project-scoped Supabase development project. The two dashboard repositories contain only their local T2.5 status-document updates.
 
 ## 3. Current delivery status
 
@@ -45,7 +47,7 @@ The T2.4 checkout/journal implementation and synchronized handoff updates are in
 |---|---|---|
 | Phase 0 — foundation | **Implementation and CI verified; owner gates open** | Credential rotation and GitHub repository-protection evidence remain |
 | Phase 1 — tenant and SaaS platform | **Implementation complete; audit open** | T1.0–T1.6 locally verified; T1.7 cannot pass yet |
-| Phase 2 — booking, POS, and money | **In progress by owner direction** | T2.0–T2.4 complete; void/refund/credit-note reversal next |
+| Phase 2 — booking, POS, and money | **In progress by owner direction** | T2.0–T2.5 complete; advances/payout settlement next |
 | Phase 3 — Telegram and AI | Not started | Depends on Phase 1–2 services/outbox |
 | Phase 4 — shop dashboard | Not started | Only the technical Next.js foundation exists |
 | Phase 5 — platform dashboard | Not started | Only the technical Next.js foundation exists |
@@ -175,6 +177,16 @@ The T2.4 checkout/journal implementation and synchronized handoff updates are in
 - Deferred PostgreSQL checks independently require item/header/payment/commission reconciliation, an open shift for cash, at least two journal postings, and equal positive debits and credits. Completed financial rows reject update/delete.
 - Clean reconstruction, RLS/IDOR, exact-calculation, parallel same-key checkout, replay, golden journal, cash-linkage, forbidden authority/PAN input, and append-only tests pass.
 
+### Phase 2 voids, refunds, credit notes, and reversals
+
+- `POST /api/v1/businesses/{business_id}/shops/{shop_id}/pos/transactions/{transaction_id}/corrections` creates either a bounded refund or a conservative same-shift void; the route requires `Idempotency-Key`.
+- The server locks and reads the immutable original receipt, derives VAT, commission, tips, and tender from stored snapshots, and rejects client financial authority beyond requested item/tip/payment return amounts.
+- Partial refunds are cumulatively bounded per item, tip, and tender method. Proportional net/VAT and barber commission use Decimal half-up calculations, with an exact final slice that reconciles to the original snapshot.
+- A void is the only correction for the receipt, reverses the complete original sale, and is permitted only for cash-only tender while the original cash shift remains open. Any sale containing card tender uses a refund/credit note because terminal settlement state is not tracked.
+- Each correction atomically allocates a credit-note number and writes append-only correction header/items/payments/restricted commission reversals, cash refund movement where applicable, a journal linked to the original checkout journal, audit, outbox, and idempotency response.
+- PostgreSQL deferred validation independently enforces original-plus-corrections reconciliation, tender bounds, same-shift voids, cash linkage, and exact reversing postings. Receptionists cannot read correction commission rows, barbers cannot read return payments, and tenant/cross-shop boundaries remain forced by RLS and composite foreign keys.
+- Clean reconstruction, same-key replay, competing-refund race, exact half refund, full cash void, card-tender void denial at service/database layers, original immutability, journal/cash reconciliation, RLS/IDOR, and append-only tests pass.
+
 ### Both Next.js foundations plus T1.5 authorization shells
 
 - Next.js 16, React 19, Tailwind 4, strict TypeScript, ESLint, lockfiles, and SHA-pinned CI.
@@ -191,7 +203,7 @@ The T2.4 checkout/journal implementation and synchronized handoff updates are in
 - Backend and both frontend full dependency audits are clean. The dashboards use Next's documented direct `@next/eslint-plugin-next` flat-config path, TypeScript ESLint, and React Hooks rules; this removed the vulnerable legacy lint dependency chain without weakening CI.
 - Built frontend bundles contain no checked backend-secret names.
 - Static checks found no unsafe serializer, dangerous Python execution, wildcard CORS, unverified JWT decode, browser token storage, or raw-HTML sink.
-- Project-scoped Supabase OAuth MCP is authenticated; thirteen migrations are applied and all 37 public application tables are forced-RLS-enabled. The only remote rows are eight controlled `journal_accounts` references; tenant and transaction tables remain empty. Security Advisor has zero findings.
+- Project-scoped Supabase OAuth MCP is authenticated; fifteen migrations are applied and all 41 public application tables are forced-RLS-enabled. The only remote rows are eight controlled `journal_accounts` references; tenant, transaction, and correction tables remain empty. Security Advisor has zero findings.
 - A dated security audit is now mandatory after every phase.
 - The Phase 1 audit found missing distributed throttling as High and fixed it. The audit remains not passed because inherited credential rotation, authenticated repository-protection evidence, and the live Storage round trip are open.
 
@@ -239,8 +251,8 @@ GET /health/live                 PASS — 200
 GET /health/ready                PASS — 200 with dependencies
 Redis stopped → readiness        PASS — 503 while PostgreSQL stayed ready
 workers.health.ping              PASS — Celery SUCCESS through real broker/worker
-Supabase application tables      PASS — 37 RLS-enabled tables; 8 controlled journal-account rows only
-Supabase migrations              PASS — 5 Phase 1 + 8 Phase 2 forward migrations
+Supabase application tables      PASS — 41 forced-RLS tables; 8 controlled journal-account rows only
+Supabase migrations              PASS — 5 Phase 1 + 10 Phase 2 forward migrations
 Supabase Security Advisor        PASS — zero findings
 Supabase Performance Advisor     PASS — INFO-only unused indexes on empty tables
 ```
@@ -248,7 +260,7 @@ Supabase Performance Advisor     PASS — INFO-only unused indexes on empty tabl
 Phase 1/2 database:
 
 ```text
-scripts/test-database.ps1            PASS — reconstruction + RLS + 11 application database tests
+scripts/test-database.ps1            PASS — reconstruction + RLS + 12 application database tests
 Remote migrations                    PASS — tenant core, FK indexes, deny policies, entitlement and export/offboarding hardening
 Remote Security Advisor              PASS — 0 findings
 Remote Performance Advisor           PASS — INFO-only unused indexes on empty tables
@@ -258,7 +270,7 @@ Private tenant-exports bucket        PASS — private, ZIP-only, 100 MB, no brow
 Live Storage object round trip       OPEN — backend service-role runtime secret not provisioned
 Phase 2 operations SQL suite         PASS — catalog/customer/calendar/legal/commission constraints and RLS
 Remote Phase 2 migrations            PASS — operations source schema + calendar time hardening
-Remote public tables/RLS             PASS — 37/37; tenant/transaction rows 0
+Remote public tables/RLS             PASS — 41/41 forced RLS; tenant/transaction/correction rows 0
 Remote browser mutation policies     PASS — 0
 Remote missing FK indexes            PASS — 0
 Phase 2 booking RLS/concurrency       PASS — holds, queue, allocation, worker, reschedule
@@ -270,6 +282,9 @@ Remote legal/cash browser mutations   PASS — 0 policies/privileges
 Phase 2 checkout RLS/concurrency      PASS — totals, split tender, commission, cash, journal, replay
 Remote checkout migrations            PASS — 20260726092654 journal + 20260726094355 FK index hardening
 Remote checkout browser mutations     PASS — 0 policies/privileges
+Phase 2 correction RLS/concurrency    PASS — replay, race bounds, void/refund, journal/cash reconciliation
+Remote correction migrations          PASS — 20260726105629 corrections + 20260726111301 void hardening
+Remote correction browser mutations   PASS — 0 policies/privileges
 ```
 
 Workstation cleanup note:
@@ -294,16 +309,16 @@ Windows no longer exposes PID 11696 through `Get-Process`, CIM, or `tasklist`, s
 
 ## 7. Exact next starting point
 
-Continue [Phase 2 T2.5](docs/phases/PHASE_2_OPERATIONS_MONEY.md): void, refund, credit note, and journal reversal.
+Continue [Phase 2 T2.6](docs/phases/PHASE_2_OPERATIONS_MONEY.md): advances, payout runs, and settlement.
 
-1. Expand T2.5 into exact correction tables, state transitions, permissions, and same-shift void policy before coding.
-2. Add forward-only schema for refund headers/items/payments and links to the original transaction, credit-note counter, and reversing journal entry.
-3. Bound partial/full refunds by the original immutable item quantity/value minus prior corrections; serialize concurrent corrections.
-4. Reverse revenue, VAT, barber payable/commission, tip payable, cash/card settlement, and journal postings without editing the original receipt.
-5. Require idempotency, in-transaction authorization/entitlement, audit, outbox, and an open matching shift for any physical cash return.
-6. Prove duplicate/parallel refunds cannot over-refund and original plus all corrections reconcile exactly.
+1. Lock the advance and payout lifecycle, permissions, closed-period rule, adjustment policy, and journal/cash contracts before coding.
+2. Add forward-only schema for barber advances, payout runs/items, bounded advance applications, and lifecycle transitions.
+3. Implement one idempotent advance disbursement that creates the receivable, cash movement, journal, audit, and outbox atomically.
+4. Build immutable closed-period earning aggregation from transaction/correction commission and tip snapshots; never recompute from current rules.
+5. Implement draft → approved → paid/cancelled payout transitions, one non-cancelled run per shop/period, bounded advance deductions, and retry-safe cash/journal settlement.
+6. Prove concurrent advance/payout calls cannot double-disburse, double-deduct, or double-pay, and that every payout item/journal reconciles exactly.
 
-Inherited gates remain: owner Telegram credential rotation; authenticated repository-protection evidence; live private-Storage round trip; CSP resolution/acceptance. Commits, pushes, and remote CI are complete and green. Do not mark Phase 1 passed until its audit evidence is complete.
+Inherited gates remain: owner Telegram credential rotation; authenticated repository-protection evidence; live private-Storage round trip; CSP resolution/acceptance. The last T2.4 commits, pushes, and remote CI are complete and green; current T2.5 source/docs are local and uncommitted. Do not mark Phase 1 passed until its audit evidence is complete.
 
 To restart the already-proven native dependencies:
 

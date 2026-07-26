@@ -11,7 +11,8 @@ Phase 1 implementation is locally verified, but its inherited credential/remote 
 - Complete: T2.2 booking, holds, availability, and queue.
 - Complete: T2.3 legal documents, receipt counters, and cash shifts.
 - Complete: T2.4 checkout, payments, commission snapshots, and balanced journal.
-- Next: T2.5 void, refund, credit note, and journal reversal.
+- Complete: T2.5 void, refund, credit note, and journal reversal.
+- Next: T2.6 advances, payout runs, and settlement.
 
 ## Outcome
 
@@ -282,21 +283,78 @@ T2.4 security checkpoint:
 
 Files:
 
-- refund/credit-note schema;
-- correction services/APIs and reconciliation tests.
+- `supabase/migrations/20260726105629_correction_credit_notes.sql`;
+- `supabase/migrations/20260726111301_correction_void_tender_hardening.sql`;
+- `supabase/tests/phase2_correction_rls.sql`;
+- `backend/app/api/corrections.py`;
+- `backend/app/services/correction_service.py`;
+- `backend/app/services/checkout_calculations.py`;
+- correction contract/database tests plus reconstruction/CI integration.
 
 Implement:
 
-- same-shift unsettled void policy;
-- partial/full refunds bounded by unrefunded quantity/value;
-- sequential credit-note number;
-- reversing payments, cash movement, commission/payable, VAT, revenue, and journal postings.
+- one idempotent correction endpoint for refund or void;
+- same-shift full-void policy derived entirely from the original transaction;
+- partial/full refunds cumulatively bounded by original item, tip, and tender snapshots;
+- sequential shop/fiscal-year credit-note number;
+- append-only correction items, return payments, restricted commission reversals, cash refund movement, and linked reversing journal;
+- in-transaction operator authorization, active entitlement, audit, outbox, and idempotency;
+- forced-RLS least-privilege reads with no browser mutation path.
 
 Gates:
 
 - duplicate/parallel refunds cannot over-refund;
 - original completed document remains unchanged;
 - original plus corrections reconcile to current financial position.
+
+Implementation decisions:
+
+- A void is permitted only as the first and only correction, must reverse a cash-only original sale completely, and must reuse its still-open original cash shift. Any sale containing card tender uses a refund/credit note because external terminal settlement state is not tracked.
+- Refund input identifies original items and requested gross return, optional tip return, return tender, cash shift where cash is returned, and a reason. The server derives net, VAT, shop share, and barber commission from immutable checkout snapshots.
+- Partial proportional values use Decimal half-up rounding. The final cumulative slice returns the stored original remainder exactly, preventing drift across multiple refunds.
+- Correction commission reversals and return payments remain separate from operational rows to preserve the T2.4 receptionist/barber privacy boundary.
+- Completed transaction rows, including the legacy `refunded_total`, remain unchanged. Append-only correction tables are the authoritative correction source.
+- The reversing journal debits stored service revenue/shop share, barber payable, VAT payable, and tip payable and credits cash/card clearing. It links to the original checkout journal and must equal the correction header/payment facts exactly.
+
+Evidence:
+
+```text
+Proportional Decimal contracts                    PASS — 105 gross → 50 net at 52.50; final slice exact
+Same-key concurrent refund replay                 PASS — one durable correction/result
+Competing final refunds                           PASS — one winner, one conflict; no over-refund
+Partial item/tip/tender correction                PASS — 52.50 gross = 50 net + 2.50 VAT; 2.50 tip
+Full same-shift cash void                         PASS — complete original reversal
+Any card-tender void                              PASS — denied by service and database hardening
+Original completed receipt                        PASS — unchanged after corrections
+Credit-note/journal/cash reconciliation           PASS — exact linked append-only reversal
+Correction RLS/IDOR matrix                        PASS — receptionist/barber/owner/other/platform
+Browser delete/backend update                     PASS — denied by RLS and append-only triggers
+Formatted PAN-like reference                      PASS — API and PostgreSQL reject
+Local clean reconstruction/RLS/concurrency suite  PASS — 12 application database tests
+Backend quality suite                             PASS — Ruff, format, mypy, 58 tests; 12 DB-gated skips
+Dependency audit                                  PASS — no known vulnerabilities
+Remote migrations                                 PASS — 20260726105629 corrections + 20260726111301 void hardening
+Remote public tables                              PASS — 41/41 forced RLS
+Remote persisted data                             PASS — 8 journal account references; tenant/transaction rows 0
+Remote browser mutation policies                  PASS — 0
+Remote missing foreign-key indexes                PASS — 0
+Remote Supabase Security Advisor                  PASS — 0 findings
+Remote Performance Advisor                        INFO-only unused indexes on empty tables
+Current source/history secret scan                PASS — no real credential leak
+```
+
+T2.5 security checkpoint:
+
+- **Pass for this task checkpoint:** no unresolved Critical or High finding was found in the correction change. This does not replace the mandatory dated Phase 2 audit at T2.8.
+- Authorization and active entitlement are repeated inside the same PostgreSQL transaction that locks the original sale and correction range.
+- Client tenant/role/price/VAT/commission/totals authority is absent; server-stored snapshots are the only calculation basis.
+- Raw and separator-formatted PAN-like references are rejected by both the API contract and a database constraint; no CVV, expiry, or cardholder fields exist.
+- RLS/IDOR tests prove shop/business separation and the payment/commission visibility matrix; public, anonymous, and authenticated browser writes are absent.
+- Deferred database validation independently enforces cumulative item/tip/tender bounds, same-shift full voids, exact cash movements, and balanced linked journals.
+- Current-source findings were six deterministic test idempotency strings and were replaced with low-entropy fixtures; the rescan and full Git history scan report zero secrets.
+- Supabase Security Advisor reports zero findings, Performance Advisor has no non-INFO finding, and the FK-index gate reports zero missing indexes.
+- The over-engineering review found no useful deletion or dependency reduction. The four correction tables are required for referential enforcement and least-privilege payment/commission visibility.
+- Ponytail debt remains one existing T2.2 marker: the shop-wide booking allocation lock is retained until measured contention justifies ordered barber/counter locks. T2.5 added no marker.
 
 ### T2.6 — Advances, payout runs, and settlement
 

@@ -1,6 +1,6 @@
 # Architecture
 
-> Target architecture with implementation status through Phase 2 T2.4. Read [../START_HERE.md](../START_HERE.md) before assuming a later component exists.
+> Target architecture with implementation status through Phase 2 T2.5. Read [../START_HERE.md](../START_HERE.md) before assuming a later component exists.
 
 This is the one-screen system view. [MASTER_PLAN.md](MASTER_PLAN.md) defines behavior and [DATA_MODEL.md](DATA_MODEL.md) defines persistence and authorization.
 
@@ -73,7 +73,8 @@ Outbox workers send Telegram/Realtime notifications only after commit. Redis out
 - T2.2 booking mutations are implemented through FastAPI. PostgreSQL owns five-minute holds, appointment overlap, queue counters, deterministic barber allocation, state/idempotency/audit/outbox, and reschedule history. Celery Beat rescans PostgreSQL each minute for hold expiry and T-30 promotion. Redis remains only the Celery broker/rate-limit/cache layer and cannot change a durable booking or queue result.
 - T2.3 legal/cash operations are implemented through FastAPI. PostgreSQL owns effective legal-document selection, fiscal-year sale/credit-note counters, one open shift per shop/register, append-only cash effects, and exact close reconciliation. Card is structurally absent from physical-cash movements.
 - T2.4 checkout is implemented through FastAPI. PostgreSQL and Decimal calculations own trusted service/legal/commission selection, immutable receipt/payment/commission snapshots, cash-only shift effects, balanced append-only journal posting, idempotency, audit, and outbox. Redis is absent from financial correctness.
-- Refund/credit-note reversal, advances, and payout mutations remain later Phase 2 work.
+- T2.5 corrections are implemented through FastAPI. The original receipt remains immutable; PostgreSQL serializes bounded item/tip/tender corrections and validates the credit note, restricted commission reversal, optional cash return, and linked reversing journal as one durable result. A full void is allowed only as the first correction for cash-only tender while its original cash shift is still open; any sale containing card tender uses refund because terminal settlement is not modeled.
+- Advances and payout mutations remain later Phase 2 work.
 
 ## Runtime components
 

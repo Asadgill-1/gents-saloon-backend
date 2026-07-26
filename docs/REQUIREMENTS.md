@@ -69,7 +69,7 @@ Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the
 | POS-02 | Cash, card with slip reference, and split tender reconcile to transaction gross total | Cash/card split and payment-total tests pass; PAN-like references rejected | verified |
 | POS-03 | Sequential receipt number is unique per shop and safe under concurrency | Parallel same-key checkout produces one receipt/transaction | verified |
 | POS-04 | VAT/TRN configuration supports non-registered and registered shops and renders required invoice fields | Full/simplified tax-invoice and non-VAT profiles plus immutable checkout legal snapshot verified | verified |
-| POS-05 | Completed sales are corrected by void/refund/credit note, never edited | API/ledger tests | planned |
+| POS-05 | Completed sales are corrected by void/refund/credit note, never edited | Same-key/race, exact reconciliation, original immutability, RLS, cash, and journal tests pass | verified |
 | POS-06 | Cash shifts reconcile opening float, cash sales/movements, expected, counted, and variance | Lifecycle/concurrency tests plus checkout cash-only movement linkage pass | verified |
 | MON-01 | Fixed percentage commission works from net-after-discount, excluding VAT and tips | Golden and range-invariant Decimal calculation tests pass | verified |
 | MON-02 | Tier/threshold commission supports flat amount, including AED 120 → barber 25/shop 95 | SQL validation and AED 120 → 25/95 checkout fixture pass | verified |
@@ -79,7 +79,7 @@ Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the
 | MON-06 | Advance grant creates one disbursement and one outstanding balance, not a negative earning | Ledger tests | planned |
 | MON-07 | Advance deduction occurs once at payout and cannot exceed allowed outstanding/payable balance | Concurrency/reconciliation tests | planned |
 | MON-08 | Payout run records gross earnings, deductions, adjustments, net, approval, and payment | Payout E2E | planned |
-| MON-09 | Every money mutation is atomic, idempotent, role-gated, and audited | Checkout path verified; later correction/advance/payout mutations remain Phase 2 work | built |
+| MON-09 | Every money mutation is atomic, idempotent, role-gated, and audited | Checkout and correction paths verified; advance/payout mutations remain Phase 2 work | built |
 
 ## Telegram and AI
 

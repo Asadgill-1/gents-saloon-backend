@@ -1,6 +1,6 @@
 # Data Model — Production Schema Contract
 
-> Target schema contract. All five Phase 1 migrations and eight Phase 2 migrations through T2.4 are implemented and applied to the development Supabase project. Sections 5.2–5.4, 6, 7.1–7.5, 7.7, 7.10, and 7.11 describe implemented schema; refund/advance/payout sections remain target design. Read [../START_HERE.md](../START_HERE.md) for current status.
+> Target schema contract. All five Phase 1 migrations and ten Phase 2 migrations through T2.5 are implemented and applied to the development Supabase project. Sections 5.2–5.4, 6, 7.1–7.7, 7.10, and 7.11 describe implemented schema; advance/payout sections remain target design. Read [../START_HERE.md](../START_HERE.md) for current status.
 
 Source of truth for SQL migrations. PostgreSQL/Supabase is authoritative for tenancy, subscriptions, bookings, queue numbers, money, idempotency, audit, and outbox delivery.
 
@@ -509,11 +509,14 @@ One row per method is allowed. Card references use a strict safe-character forma
 
 ### 7.6 Refunds and credit notes
 
-- `refunds`: transaction reference, reason, approved actor, total, created time.
-- `refund_items`: original item reference, quantities/amounts.
-- `refund_payments`: return method and amount.
-- Each refund receives its own sequential credit-note number and reversing journal entry.
-- A void is allowed only under the documented un-settled same-shift policy; otherwise use refund/credit note.
+- `transaction_corrections`: immutable `void`/`refund` header linked to the original completed transaction, sequential credit-note identity, original cash shift where required, item/net/VAT/tip/grand totals, actor/reason/time.
+- `transaction_correction_items`: original transaction-item reference plus server-derived gross, net, VAT, and shop-share reversal.
+- `transaction_correction_item_commissions`: restricted per-item barber/commission reversal, separated so receptionists cannot browse pay data.
+- `transaction_correction_payments`: returned cash/card tender snapshot and safe card slip reference; barbers cannot browse payment rows.
+- Each correction allocates one shop/fiscal-year credit-note number and links one balanced reversing journal to the original checkout journal. Cash return creates one exact `refund` movement on an open shift.
+- PostgreSQL deferred validation bounds cumulative gross per item, net/VAT, commission, tip, and each tender method against the immutable original. Partial slices round half-up; the final cumulative slice reconciles exactly to the stored original.
+- A void must be the first and only correction, reverse the complete original item/tip/tender values, use cash-only original tender, and reuse the still-open original cash shift. Any sale containing card tender uses a refund/credit note because external terminal settlement is not tracked.
+- Original transaction/item/payment/commission rows are never updated. The legacy `transactions.refunded_total` remains unchanged; correction tables are the append-only financial source.
 - A provider-neutral `e_invoice_documents` adapter boundary is reserved for the platform's B2B SaaS invoices. No accredited provider is selected until the platform owner decides. Shop B2C service receipts remain on the normal POS document flow unless official scope changes.
 
 ### 7.7 `commission_rules`
@@ -586,7 +589,7 @@ Financial truth is append-only:
 - `journal_entries`: event header, tenant, source type/id, idempotency key, actor, time.
 - `journal_postings`: account, optional barber, debit, credit; exactly one side positive.
 
-T2.4 seeds eight controlled accounts and posts checkout debits to `cash`/`card_clearing`, with credits to `service_revenue`, `barber_payable`, `vat_payable`, and `tip_payable`. A deferred constraint trigger requires at least two postings and `SUM(debit) = SUM(credit) > 0`. Update/delete triggers reject changes. T2.5 adds linked reversing entries.
+T2.4 seeds eight controlled accounts and posts checkout debits to `cash`/`card_clearing`, with credits to `service_revenue`, `barber_payable`, `vat_payable`, and `tip_payable`. T2.5 linked reversing entries debit the stored revenue/shop share, barber payable, VAT payable, and tip payable and credit the returned cash/card clearing amounts. Deferred constraint triggers require at least two postings, `SUM(debit) = SUM(credit) > 0`, and correction totals that exactly match the original snapshots and correction rows. Update/delete triggers reject changes.
 
 ## 8. Reliability and audit
 

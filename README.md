@@ -12,7 +12,7 @@ Product surfaces:
 - Platform dashboard for onboarding, cash subscriptions, suspension, exports, and offboarding.
 - Manual cash SaaS billing with business-wide or per-shop mode.
 
-Status: Phase 2 is active by explicit owner approval. T2.0–T2.4 are complete locally and on the Supabase development project: operation sources, booking/queue, legal documents, fiscal-year counters, cash shifts, checkout/payments, commission snapshots, and balanced journal posting are verified. T2.5 void/refund/credit-note reversal is next. Phase 1 implementation is complete, but its [dated audit](docs/security-audits/PHASE_1_2026-07-26.md) remains open for inherited credential rotation, authenticated repository-protection evidence, and a live private-Storage round trip.
+Status: Phase 2 is active by explicit owner approval. T2.0–T2.5 are complete locally and on the Supabase development project: operation sources, booking/queue, legal documents, fiscal-year counters, cash shifts, checkout/payments, commission snapshots, balanced journal posting, and append-only void/refund/credit-note reversals are verified. T2.6 advances, payout runs, and settlement is next. Phase 1 implementation is complete, but its [dated audit](docs/security-audits/PHASE_1_2026-07-26.md) remains open for inherited credential rotation, authenticated repository-protection evidence, and a live private-Storage round trip.
 
 ## Required reading
 
