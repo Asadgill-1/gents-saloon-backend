@@ -2,7 +2,7 @@
 
 ## Status — 2026-07-31
 
-**Incomplete; visual prototype only.** The current screens preserve the intended styling, but tenant, receipt, offboarding, bot-health, and analytics records are hardcoded and actions are not persisted. Phase 5 remains open until cookie-based Supabase SSR, backend operations, pagination, guarded confirmations, Playwright, and its dated security audit pass. See [../../START_HERE.md](../../START_HERE.md).
+**Incomplete; operational recovery is in progress.** The recovery branch now uses cookie-based Supabase SSR, database-derived platform authorization, FastAPI-backed tenant/subscription/receipt/offboarding/bot-health/analytics views, 50-row keyset pagination, guarded idempotent server actions, and nonce-based script CSP. Phase 5 remains open until standalone export/download, audit/security/backup/escalation views, complete business detail workflows, Playwright/accessibility staging gates, and its dated security audit pass. See [../../START_HERE.md](../../START_HERE.md).
 
 ## Outcome
 
