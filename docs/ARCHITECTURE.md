@@ -1,6 +1,6 @@
 # Architecture
 
-> Target architecture with implementation status through Phase 2 T2.6. Read [../START_HERE.md](../START_HERE.md) before assuming a later component exists.
+> Target architecture with implementation status through Phase 2 T2.7. Read [../START_HERE.md](../START_HERE.md) before assuming a later component exists.
 
 This is the one-screen system view. [MASTER_PLAN.md](MASTER_PLAN.md) defines behavior and [DATA_MODEL.md](DATA_MODEL.md) defines persistence and authorization.
 
@@ -75,6 +75,8 @@ Outbox workers send Telegram/Realtime notifications only after commit. Redis out
 - T2.4 checkout is implemented through FastAPI. PostgreSQL and Decimal calculations own trusted service/legal/commission selection, immutable receipt/payment/commission snapshots, cash-only shift effects, balanced append-only journal posting, idempotency, audit, and outbox. Redis is absent from financial correctness.
 - T2.5 corrections are implemented through FastAPI. The original receipt remains immutable; PostgreSQL serializes bounded item/tip/tender corrections and validates the credit note, restricted commission reversal, optional cash return, and linked reversing journal as one durable result. A full void is allowed only as the first correction for cash-only tender while its original cash shift is still open; any sale containing card tender uses refund because terminal settlement is not modeled.
 - T2.6 advances and payouts are implemented through FastAPI. PostgreSQL derives closed-period earnings/reversals from immutable sale/correction snapshots, prevents overlapping shop periods, bounds advance deductions, and independently validates every receivable, cash movement, application, lifecycle transition, and journal posting. Only owners/platform administrators mutate; browser access remains RLS-filtered and read-only.
+- T2.7 reports are direct trusted FastAPI projections over normalized PostgreSQL facts; Redis, Celery, cached totals, and materialized views are absent from reporting correctness. Shop reports repeat shop/role/entitlement authorization, and the business overview includes only entitled active shops.
+- T2.7 platform billing e-invoice envelopes are automatically prepared from immutable subscription cash receipts in the receipt transaction. The boundary is forced-RLS, append-only, provider-neutral, B2B `prepared` only, and structurally separate from B2C POS receipts. Audit/outbox records carry identifiers and status but no provider credential or payload.
 
 ## Runtime components
 
@@ -82,7 +84,7 @@ Backend VPS:
 
 - Caddy: TLS, request limits, reverse proxy.
 - FastAPI: health, Telegram webhooks, `/api/v1`.
-- Celery worker: subscription expiry, private tenant exports, and later outbox/reminders/reports.
+- Celery worker: subscription expiry, private tenant exports, and later outbox/reminders. Reports remain direct database reads unless measured production load justifies an explicitly versioned projection.
 - Celery Beat: 00:05 Asia/Dubai expiry evaluation, one-minute export claim/stale recovery, and later appointment/health schedules.
 - Redis: private Docker network, authenticated, non-authoritative.
 

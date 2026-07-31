@@ -190,7 +190,7 @@ The Supabase Auth invitation is a trusted-server prerequisite and produces the o
 
 ### Cash subscription
 
-Choose business → billing scope → amount → receipt reference → coverage/`paid_until` → confirm. Result is append-only receipt plus entitlement update and audit. Correction uses a linked mirror reversal, not edit. Reversal corrects cash evidence; any access removal remains a separate audited suspension/coverage action.
+Choose business → billing scope → amount → receipt reference → coverage/`paid_until` → confirm. Result is an append-only receipt, entitlement update, audit/outbox evidence, and one provider-neutral B2B `prepared` e-invoice source envelope. Correction uses a linked mirror reversal, not edit, and creates a linked credit-note source envelope. Reversal corrects cash evidence; any access removal remains a separate audited suspension/coverage action. Provider transmission is not part of this flow.
 
 ### Suspend/resume
 

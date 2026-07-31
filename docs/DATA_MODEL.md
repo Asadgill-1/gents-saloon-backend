@@ -1,6 +1,6 @@
 # Data Model — Production Schema Contract
 
-> Target schema contract. All five Phase 1 migrations and eleven Phase 2 migrations through T2.6 are implemented and applied to the development Supabase project. Sections 5.2–5.4 and 6–7.11 describe implemented schema. Read [../START_HERE.md](../START_HERE.md) for current status.
+> Target schema contract. All five Phase 1 migrations and twelve Phase 2 migrations through T2.7 are implemented and applied to the development Supabase project. Sections 5.2–5.4 and 6–7.13 describe implemented schema. Read [../START_HERE.md](../START_HERE.md) for current status.
 
 Source of truth for SQL migrations. PostgreSQL/Supabase is authoritative for tenancy, subscriptions, bookings, queue numbers, money, idempotency, audit, and outbox delivery.
 
@@ -597,6 +597,59 @@ Financial truth is append-only:
 - `journal_postings`: account, optional barber, debit, credit; exactly one side positive.
 
 T2.4 seeds eight controlled accounts and posts checkout debits to `cash`/`card_clearing`, with credits to `service_revenue`, `barber_payable`, `vat_payable`, and `tip_payable`. T2.5 linked reversing entries debit the stored revenue/shop share, barber payable, VAT payable, and tip payable and credit the returned cash/card clearing amounts. T2.6 adds `payout_adjustments`: an advance debits `advance_receivable` and credits `cash`; a paid payout reduces signed commission/tip payables, posts signed adjustments, credits `advance_receivable` for applied advances, and credits `cash` for net cash paid. Deferred constraint triggers require at least two postings, `SUM(debit) = SUM(credit) > 0`, and exact source reconciliation. Update/delete triggers reject changes.
+
+### 7.12 Reports
+
+T2.7 adds no report-total table, cache, materialized view, or Celery aggregation
+truth. FastAPI queries normalized bookings, immutable transactions/corrections,
+payments, cash movements/shifts, advances, paid payout items, and journal
+postings for a required half-open UTC period.
+
+- Shop reports are restricted to owner, assigned manager, and platform admin.
+- Business overview is owner/platform-only and includes only currently entitled
+  active shops.
+- Barber and shop rows use membership/shop UUID keyset pagination.
+- Every report request uses one repeatable-read transaction so aggregate and
+  row queries observe the same committed snapshot.
+- Period/order access paths have explicit composite/partial indexes; monetary
+  totals remain derived from the same stored facts used by settlement.
+
+### 7.13 `e_invoice_documents`
+
+This is a provider-neutral platform-subscription billing source envelope, not a
+POS invoice and not proof of provider delivery:
+
+```text
+id uuid PK
+business_id uuid FK
+subscription_cash_receipt_id uuid UNIQUE composite FK with business_id
+reversal_of_document_id uuid NULL FK
+document_type invoice | credit_note
+transaction_scope b2b | b2g
+status prepared
+source_schema_version platform_billing_source_v1
+currency AED
+amount numeric(14,2) positive
+source_snapshot jsonb object
+prepared_by_auth_user_id uuid FK
+prepared_at timestamptz
+```
+
+An after-insert receipt trigger creates exactly one envelope in the same
+transaction. An original receipt maps to `invoice`; a receipt reversal maps to
+`credit_note` and must link to the original document. The validator independently
+re-derives and compares the business buyer, receipt/subscription/shop identity,
+coverage, amount, currency, actor, type, and reversal snapshot. Current source
+rows are always database-derived B2B `prepared`; B2G is reserved for a future
+verified government buyer.
+
+The table has forced RLS. Only the owning business owner or platform
+administrator may select through the authenticated browser role, and no browser
+mutation policy exists. Update/delete are rejected. Preparation writes one
+audit row and one deduplicated outbox event. There is deliberately no
+transaction/booking/customer FK, provider payload/response, PINT-AE XML,
+callback, delivery state, or accreditation claim. Export schema
+`2026-07-26.v2` includes the safe source document dataset.
 
 ## 8. Reliability and audit
 

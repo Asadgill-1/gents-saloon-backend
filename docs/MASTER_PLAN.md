@@ -141,6 +141,13 @@ The current [Ministry of Finance e-invoicing portal](https://mof.gov.ae/en/about
 - does not select, emulate, or hard-code one Accredited Service Provider;
 - revalidates mandatory fields, scope, timelines, and provider choice immediately before production onboarding.
 
+T2.7 implements only the safe source boundary for platform subscription cash
+receipts: one immutable database-derived B2B `prepared` invoice envelope per
+receipt and one linked credit-note envelope per reversal. It deliberately has
+no B2C POS/customer link, provider payload, XML, callback, delivery claim, or
+accreditation label. Provider selection and transmission remain future work
+after current legal revalidation.
+
 ## 5. Booking and queue contract
 
 - Queue, appointment, and walk-in bookings share one state machine.

@@ -1,8 +1,8 @@
 # Phase 3 — Telegram and AI Reception
 
-## Status — 2026-07-25
+## Status — 2026-07-31
 
-**Not started.** Requires the verified Phase 1 tenant platform and Phase 2 booking/money services. No Telegram bot or Moonshot runtime is implemented. See [../../START_HERE.md](../../START_HERE.md).
+**Incomplete; recovery in progress.** The inherited prototype does not yet provide secure webhook hashing, durable processing recovery, database-derived role authorization, real aiogram outbox delivery, complete role/button flows, bounded AI tools/budgets, or a passing Phase 3 security audit. Its unapplied migration may be replaced by a new forward migration; the 17 applied Phase 1/2 migrations remain immutable. See [../../START_HERE.md](../../START_HERE.md).
 
 ## Outcome
 

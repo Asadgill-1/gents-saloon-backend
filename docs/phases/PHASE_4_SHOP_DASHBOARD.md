@@ -1,8 +1,8 @@
 # Phase 4 — Shop and Business-Owner Dashboard
 
-## Status — 2026-07-25
+## Status — 2026-07-31
 
-**Product UI not started.** The separate repository has only a verified Next.js/Supabase SSR technical foundation. Begin this phase only after Phases 1–3 expose stable, tested APIs. See [../../START_HERE.md](../../START_HERE.md).
+**Incomplete; visual prototype only.** The current components preserve the intended styling, but operational records are hardcoded and mutations are client-only. Phase 4 remains open until Supabase SSR authentication, backend reads/actions, Realtime refresh, role gates, Playwright, accessibility, and its dated security audit pass. See [../../START_HERE.md](../../START_HERE.md).
 
 ## Outcome
 

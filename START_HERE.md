@@ -1,10 +1,10 @@
 # Start Here — Current Project Handoff
 
-Last updated: **2026-07-26, Asia/Dubai**
+Last updated: **2026-07-31, Asia/Dubai**
 
-Checkpoint: **PHASE2-PAYOUTS-2026-07-26**
+Checkpoint: **FULL-RECOVERY-BASELINE-2026-07-31**
 
-Current phase: **Phase 2 — T2.0–T2.6 complete; T2.7 reports/e-invoicing boundary next**
+Current phase: **Phase 3 — Telegram and AI recovery in progress; Phases 4–6 are incomplete**
 
 This is the authoritative restart document for a new human, LLM, or AI coding agent. Read it before planning or changing code.
 
@@ -12,8 +12,8 @@ This is the authoritative restart document for a new human, LLM, or AI coding ag
 
 1. This file.
 2. [CLAUDE.md](CLAUDE.md) for binding implementation and security workflow.
-3. [Phase 2 execution plan](docs/phases/PHASE_2_OPERATIONS_MONEY.md), which is the active phase.
-4. [Phase 1 security audit](docs/security-audits/PHASE_1_2026-07-26.md), which records the open inherited and operational gates.
+3. [Phase 3 execution plan](docs/phases/PHASE_3_TELEGRAM_AI.md).
+4. [Phase 2 security audit](docs/security-audits/PHASE_2_2026-07-26.md) and [Phase 1 security audit](docs/security-audits/PHASE_1_2026-07-26.md).
 5. [Security rules](docs/SECURITY.md) and [requirements ledger](docs/REQUIREMENTS.md).
 6. [Master plan](docs/MASTER_PLAN.md), [data model](docs/DATA_MODEL.md), and [project decisions](docs/PROJECT_CONTEXT.md).
 
@@ -29,15 +29,15 @@ This folder contains **three independent Git repositories**. Run Git checks and 
 | Shop dashboard | `saloon-shop-dashboard/` | `Asadgill-1/saloon-shop-dashboard` | Owner/shop/reception/POS frontend; Phase 4 product UI |
 | Platform dashboard | `saloon-gents-system-owner-dashboard/` | `Asadgill-1/saloon-gents-system-owner-dashboard` | Platform-owner SaaS operations frontend; Phase 5 product UI |
 
-All three repositories are on `main`, pushed, synchronized with their remotes, and green in GitHub Actions at the T2.6 implementation/status checkpoint:
+All three repositories have recovery work on `codex/full-recovery`. The remote `main` checkpoints that existed before recovery were:
 
-- backend/canonical docs: `324caec`;
-- shop dashboard: `18bebed`;
-- platform dashboard: `2a44700`.
+- backend/canonical docs: `e6f2329`;
+- shop dashboard: `2ae5729`;
+- platform dashboard: `7c08910`.
 
-The matching GitHub Actions runs passed in all three repositories. Preserve unrelated future owner changes and inspect each repository independently before staging.
+Phase 2 reports/e-invoice work is locally verified and committed on the recovery branch. The inherited Phase 3 implementation and Phase 4/5 dashboard screens do not satisfy their gates: Telegram delivery/authorization/AI containment is incomplete, and dashboard records and mutations are mock client state. Preserve the current visual styling while replacing those data paths.
 
-The T2.6 backend/schema/tests and synchronized dashboard status updates are included in those pushed commits, and all matching workflows passed. Remote migration `20260726115339_advance_payout_settlement` is applied to the project-scoped Supabase development project; its matching local forward migration is `supabase/migrations/20260726113101_advance_payout_settlement.sql`.
+The local Phase 1/2 migration chain reconstructs successfully through `supabase/migrations/20260726122713_reports_einvoice_boundary.sql`. Fresh remote checksum reconciliation is open because this checkout is not currently linked to a Supabase project.
 
 ## 3. Current delivery status
 
@@ -45,11 +45,11 @@ The T2.6 backend/schema/tests and synchronized dashboard status updates are incl
 |---|---|---|
 | Phase 0 — foundation | **Implementation and CI verified; owner gates open** | Credential rotation and GitHub repository-protection evidence remain |
 | Phase 1 — tenant and SaaS platform | **Implementation complete; audit open** | T1.0–T1.6 locally verified; T1.7 cannot pass yet |
-| Phase 2 — booking, POS, and money | **In progress by owner direction** | T2.0–T2.6 complete; reports/e-invoicing boundary next |
-| Phase 3 — Telegram and AI | Not started | Depends on Phase 1–2 services/outbox |
-| Phase 4 — shop dashboard | Not started | Only the technical Next.js foundation exists |
-| Phase 5 — platform dashboard | Not started | Only the technical Next.js foundation exists |
-| Phase 6 — production rollout | Not started | No production deployment exists |
+| Phase 2 — booking, POS, and money | **Implementation and security audit verified** | T2.0–T2.8 complete; dated Phase 2 security audit green |
+| Phase 3 — Telegram and AI | **Incomplete; recovery active** | Schema, webhook, authorization, transport, outbox delivery, AI containment, flows, and audit gates remain |
+| Phase 4 — shop dashboard | **Incomplete; visual prototype only** | Existing styling is retained, but mock data/mutations must be replaced with backend reads/actions and Playwright proof |
+| Phase 5 — platform dashboard | **Incomplete; visual prototype only** | Existing styling is retained, but SSR auth, backend operations, pagination, confirmations, and Playwright proof remain |
+| Phase 6 — production rollout | **Not started** | Requires completed prior phases, owner infrastructure/secrets, staging UAT, canaries, rollback drill, and cutover approval |
 
 ## 4. What is implemented
 
@@ -125,7 +125,7 @@ The T2.6 backend/schema/tests and synchronized dashboard status updates are incl
 ### Phase 1 export, offboarding, and request limits
 
 - Platform-admin-only, idempotent APIs request tenant exports, issue reauthorized short-lived signed links, confirm delivery, freeze offboarding scope, and soft-archive only after delivery.
-- Export schema `2026-07-26.v1` creates a ZIP containing `manifest.json` plus JSON/CSV datasets from explicit Phase 1 column allowlists. It excludes bot/webhook/queue/storage credentials and internal delivery/idempotency rows and redacts credential-like audit payload fields.
+- Export schema `2026-07-26.v2` creates a ZIP containing `manifest.json` plus JSON/CSV datasets from explicit column allowlists. It retains the Phase 1 datasets and adds safe e-invoice source documents; it excludes bot/webhook/queue/storage/provider credentials and internal delivery/idempotency rows and redacts credential-like audit payload fields.
 - PostgreSQL records schema version, object key, byte size, content type, SHA-256, attempts, lifecycle timestamps, and safe failure codes. Transition triggers and partial unique indexes prevent illegal lifecycle moves or duplicate open offboarding cases.
 - The Celery export worker claims rows with `FOR UPDATE SKIP LOCKED`, commits before storage work, recovers stale claims, and deletes expired objects while retaining audit metadata.
 - The Supabase development project has a private ZIP-only `tenant-exports` bucket with a 100 MB object limit and no browser object policies. A live object upload/signed-download/delete smoke remains open until an approved backend service-role secret is provisioned.
@@ -194,6 +194,36 @@ The T2.6 backend/schema/tests and synchronized dashboard status updates are incl
 - Concurrent tests prove same-key advance/run replay, one winner for competing payment calls, no double deduction/payment, exact source totals, and cancellation without balance effects. Forced RLS proves receptionist none, barber-own reads, owner/business reads, unrelated-owner isolation, and platform visibility.
 - Native PostgreSQL reconstruction, SQL/RLS tests, 13 application database integration tests, Ruff, mypy, 61 backend tests, dependency audit, secret scans, and the T2.6 task security checkpoint pass.
 
+### Phase 2 reports and provider-neutral e-invoice source
+
+- `GET /api/v1/businesses/{business_id}/shops/{shop_id}/reports` is owner/assigned-manager/platform-only. It reads normalized booking, transaction, correction, tender, cash, advance, payout, and journal truth directly for a required half-open UTC period of at most 366 days.
+- `GET /api/v1/businesses/{business_id}/overview` is owner/platform-only and aggregates only currently entitled active shops. Per-shop subscription pause therefore excludes that shop, and a manager cannot infer sibling-shop or business totals.
+- Barber and shop result sets use stable UUID keyset pagination capped at 100. Exact integration fixtures prove one-page and multi-page equality plus sale/refund/cash/commission/payout/journal reconciliation.
+- Every platform subscription cash receipt now creates one immutable B2B `prepared` source envelope; a receipt reversal creates one linked credit-note envelope. PostgreSQL derives the source/buyer snapshot and independently validates it before insert.
+- `e_invoice_documents` is forced-RLS, owner/platform read-only in browser, and append-only. It has no POS transaction, booking, customer, provider-payload, callback, XML, or delivery field; ordinary B2C saloon receipts remain in the POS flow.
+- Export schema `2026-07-26.v2` includes the safe e-invoice dataset. The boundary writes audit/outbox atomically, but does not claim accreditation or select an Accredited Service Provider.
+- Local reconstruction and the T2.7 security checkpoint pass. Remote migration `20260726130318_reports_einvoice_boundary` is applied: 46/46 public tables force RLS, no tenant/financial rows exist, Security Advisor has zero findings, and missing e-invoice FK indexes/browser mutations/exposed private helpers are zero.
+
+### Phase 4 shop dashboard visual prototype (not operational)
+
+- Queue Board with walk-in/appointment management, barber allocation, and real-time status.
+- POS Checkout Panel for completed bookings with cash/card tender, discounts, and tip handling.
+- Cash Shift Manager with open/close lifecycle, pay-in/pay-out, and variance tracking.
+- Shop Reports View with date-range revenue, barber performance, and service analytics.
+- Dashboard Header with business/shop owner switching and sign-out.
+- Components exist locally in `saloon-shop-dashboard/app/_components/`, but use hardcoded records and client-only state. They are design salvage, not Phase 4 completion evidence.
+
+### Phase 5 platform dashboard visual prototype (not operational)
+
+- Platform Header with session-aware admin display and sign-out.
+- Tenant Fleet table with onboarding modal, subscription status, and search.
+- Billing & Cash Receipts with receipt recording and reversal.
+- Offboarding & Export workflow with guided confirmation.
+- Bot Fleet Health monitor with per-tenant bot status.
+- SaaS Executive Analytics with revenue, tenant, and growth KPIs.
+- The existing components build locally, but their tenant, receipt, offboarding, bot-health, and analytics records are mock data and their mutations are not persisted.
+- A prior Vercel deployment exists, but it is not a production-ready Phase 5 deployment and does not establish a working authenticated backend flow.
+
 ### Both Next.js foundations plus T1.5 authorization shells
 
 - Next.js 16, React 19, Tailwind 4, strict TypeScript, ESLint, lockfiles, and SHA-pinned CI.
@@ -202,7 +232,6 @@ The T2.6 backend/schema/tests and synchronized dashboard status updates are incl
 - Production HTTPS environment validation.
 - CSP, HSTS, referrer, frame, content-type, and permissions headers.
 - Minimal `/login`, protected server authorization shells, generic unavailable states, and server-side sign-out actions.
-- No product dashboard modules are implemented yet.
 
 ### Security work
 
@@ -210,7 +239,7 @@ The T2.6 backend/schema/tests and synchronized dashboard status updates are incl
 - Backend and both frontend full dependency audits are clean. The dashboards use Next's documented direct `@next/eslint-plugin-next` flat-config path, TypeScript ESLint, and React Hooks rules; this removed the vulnerable legacy lint dependency chain without weakening CI.
 - Built frontend bundles contain no checked backend-secret names.
 - Static checks found no unsafe serializer, dangerous Python execution, wildcard CORS, unverified JWT decode, browser token storage, or raw-HTML sink.
-- Project-scoped Supabase OAuth MCP is authenticated; sixteen migrations are applied and all 45 public application tables are forced-RLS-enabled. The only remote rows are nine controlled `journal_accounts` references; tenant, transaction, correction, advance, and payout tables remain empty. Security Advisor has zero findings.
+- Project-scoped Supabase OAuth MCP is authenticated; seventeen migrations are applied and all 46 public application tables are forced-RLS-enabled. The only remote rows are nine controlled `journal_accounts` references; tenant and financial tables remain empty. Security Advisor has zero findings.
 - A dated security audit is now mandatory after every phase.
 - The Phase 1 audit found missing distributed throttling as High and fixed it. The audit remains not passed because inherited credential rotation, authenticated repository-protection evidence, and the live Storage round trip are open.
 
@@ -220,10 +249,10 @@ Backend:
 
 ```text
 uv lock --check                     PASS
-uv run ruff check .                 PASS
-uv run ruff format --no-cache --check .  PASS
+uv run ruff check <Phase 2 files>   PASS
+uv run ruff format --check <Phase 2 files> PASS
 uv run mypy app workers             PASS
-uv run pytest -q                    PASS — 55 passed, 11 DB-gated skips
+uv run pytest <Phase 2 files>       PASS — 2 passed, 5 DB-gated skips
 uv run pip-audit                    PASS — no known vulnerabilities
 ```
 
@@ -258,8 +287,8 @@ GET /health/live                 PASS — 200
 GET /health/ready                PASS — 200 with dependencies
 Redis stopped → readiness        PASS — 503 while PostgreSQL stayed ready
 workers.health.ping              PASS — Celery SUCCESS through real broker/worker
-Supabase application tables      PASS — 45 forced-RLS tables; 9 controlled journal-account rows only
-Supabase migrations              PASS — 5 Phase 1 + 11 Phase 2 forward migrations
+Supabase application tables      PASS — 46 forced-RLS tables; 9 controlled journal-account rows only
+Supabase migrations              PASS — 5 Phase 1 + 12 Phase 2 forward migrations
 Supabase Security Advisor        PASS — zero findings
 Supabase Performance Advisor     PASS — INFO-only unused indexes on empty tables
 ```
@@ -277,7 +306,7 @@ Private tenant-exports bucket        PASS — private, ZIP-only, 100 MB, no brow
 Live Storage object round trip       OPEN — backend service-role runtime secret not provisioned
 Phase 2 operations SQL suite         PASS — catalog/customer/calendar/legal/commission constraints and RLS
 Remote Phase 2 migrations            PASS — operations source schema + calendar time hardening
-Remote public tables/RLS             PASS — 45/45 forced RLS; tenant/transaction/correction/advance/payout rows 0
+Remote public tables/RLS             PASS — 46/46 forced RLS; tenant/financial/e-invoice rows 0
 Remote browser mutation policies     PASS — 0
 Remote missing FK indexes            PASS — 0
 Phase 2 booking RLS/concurrency       PASS — holds, queue, allocation, worker, reschedule
@@ -295,6 +324,9 @@ Remote correction browser mutations   PASS — 0 policies/privileges
 Phase 2 payout RLS/concurrency         PASS — replay, period exclusion, one pay winner, exact advance/cash/journal
 Remote payout migration                PASS — 20260726115339 advance/payout settlement
 Remote payout browser mutations        PASS — 0 policies/privileges
+Phase 2 report/e-invoice suite         PASS — reconciliation, pagination, role/IDOR, trigger, RLS, export v2
+Remote report/e-invoice migration      PASS — 20260726130318 reports/e-invoice boundary
+Remote report/e-invoice guards         PASS — 0 browser mutations, forbidden columns, missing FK indexes, exposed helpers
 ```
 
 Workstation cleanup note:
@@ -319,16 +351,12 @@ Windows no longer exposes PID 11696 through `Get-Process`, CIM, or `tasklist`, s
 
 ## 7. Exact next starting point
 
-Continue [Phase 2 T2.7](docs/phases/PHASE_2_OPERATIONS_MONEY.md): reports and the provider-neutral e-invoicing boundary.
+1. Replace the unapplied Phase 3 migration with a new forward migration without changing the 17 applied Phase 1/2 migrations.
+2. Implement hashed webhook verification, durable update claiming/recovery, database-derived Telegram authorization, real aiogram delivery, and fail-closed AI containment.
+3. Add the missing shop/platform backend read and mutation interfaces, then connect both dashboards through Supabase SSR server components/actions.
+4. Complete dated Phase 3, 4, and 5 security audits before beginning Phase 6 infrastructure and cutover work.
 
-1. Expand T2.7 into executable tasks and lock report consumers, authorization, cursor order, date/timezone semantics, stored-snapshot equations, and export limits before coding.
-2. Implement cursor-paginated shop operational and financial reports that reconcile exactly to bookings, queue, transactions, corrections, cash shifts, payouts, and journal truth.
-3. Implement the business-owner cross-shop aggregate with database-derived business authorization and explicit shop grouping; never accept a client-selected unauthorized shop set.
-4. Add the provider-neutral e-invoice document/outbox state boundary only for in-scope platform B2B/B2G documents. Keep ordinary saloon B2C receipts separate.
-5. Do not add a provider SDK or claim UAE production accreditation until the owner selects an accredited service provider and the current legal contract is revalidated.
-6. Add RLS/IDOR, pagination stability, reconciliation, high-volume, retry, and safe-export tests; finish the T2.7 security checkpoint and update every handoff document.
-
-Inherited gates remain: owner Telegram credential rotation; authenticated repository-protection evidence; live private-Storage round trip; CSP resolution/acceptance. T2.6 is committed, pushed, synchronized, and green in remote CI across all three repositories. Do not mark Phase 1 passed until its audit evidence is complete.
+Inherited owner gates remain: rotate all four Telegram credentials; prove authenticated repository protection; perform the live private-Storage round trip; supply isolated staging/production projects, domains, VPS, and external service credentials through approved secret channels.
 
 To restart the already-proven native dependencies:
 

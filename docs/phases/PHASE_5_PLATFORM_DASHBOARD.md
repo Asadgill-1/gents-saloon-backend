@@ -1,8 +1,8 @@
 # Phase 5 — Platform Dashboard and SaaS Operations
 
-## Status — 2026-07-25
+## Status — 2026-07-31
 
-**Product UI not started.** The separate repository has only a verified Next.js/Supabase SSR technical foundation. Begin after the Phase 1 SaaS APIs and later operational APIs are stable. See [../../START_HERE.md](../../START_HERE.md).
+**Incomplete; visual prototype only.** The current screens preserve the intended styling, but tenant, receipt, offboarding, bot-health, and analytics records are hardcoded and actions are not persisted. Phase 5 remains open until cookie-based Supabase SSR, backend operations, pagination, guarded confirmations, Playwright, and its dated security audit pass. See [../../START_HERE.md](../../START_HERE.md).
 
 ## Outcome
 

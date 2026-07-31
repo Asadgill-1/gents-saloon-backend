@@ -45,6 +45,7 @@ Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the
 | SUB-08 | Resume after non-payment requires valid paid coverage | Service/database integration tests | verified |
 | SUB-09 | Offboarding is export-first, revokes sessions, disables tenant surfaces, and soft-archives data | Reconstructed lifecycle, entitlement, bot/public, and audit assertions | verified |
 | SUB-10 | Export is versioned, checksummed, access-controlled, and includes documented table/field coverage | Archive restore/inspection, checksum, authorization, expiry, and allowlist tests | verified |
+| SUB-11 | Platform cash receipts and reversals create immutable, exportable, provider-neutral B2B invoice/credit-note source envelopes without mixing B2C POS | Trigger/reconciliation, RLS, append-only, source-boundary, and export-v2 tests | verified |
 
 ## Booking, queue, and customer operations
 
@@ -76,10 +77,11 @@ Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the
 | MON-03 | Tips are 100% barber and recorded separately | Separate tip snapshot and `tip_payable` journal posting pass | verified |
 | MON-04 | Effective-dated immutable commission rules and transaction snapshots preserve history | Effective rule selection and restricted immutable snapshot tests pass | verified |
 | MON-05 | Rounding is half-up to fils; any remainder goes to shop; split always reconciles | Golden and range-invariant reconciliation tests pass | verified |
-| MON-06 | Advance grant creates one disbursement and one outstanding balance, not a negative earning | Ledger tests | planned |
-| MON-07 | Advance deduction occurs once at payout and cannot exceed allowed outstanding/payable balance | Concurrent pay permits one winner; deferred database reconciliation proves one bounded application | built |
-| MON-08 | Payout run records gross earnings, deductions, adjustments, net, approval, and payment | Payout E2E | planned |
-| MON-09 | Every money mutation is atomic, idempotent, role-gated, and audited | Checkout, correction, advance, and payout paths verified through T2.6 | built |
+| MON-06 | Advance grant creates one disbursement and one outstanding balance, not a negative earning | Exact cash/receivable journal and concurrent idempotency tests | verified |
+| MON-07 | Advance deduction occurs once at payout and cannot exceed allowed outstanding/payable balance | Concurrent pay permits one winner; deferred database reconciliation proves one bounded application | verified |
+| MON-08 | Payout run records gross earnings, deductions, adjustments, net, approval, and payment | Draft/approve/pay/cancel lifecycle, concurrency, cash, journal, and RLS tests | verified |
+| MON-09 | Every money mutation is atomic, idempotent, role-gated, and audited | Checkout, correction, advance, payout, report, and e-invoice boundary paths verified through T2.8 | verified |
+| MON-10 | Owner sees entitled all-shop totals; owner/manager/platform shop reports reconcile stored booking, sale, correction, cash, advance, payout, barber, and journal facts | Exact database fixture, role/IDOR matrix, and UUID keyset traversal | verified |
 
 ## Telegram and AI
 

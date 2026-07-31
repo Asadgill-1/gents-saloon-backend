@@ -121,6 +121,9 @@ Concurrency tests run two or more simultaneous calls against checkout, confirm, 
 - Checkout, void, refund, advance, payout, cash adjustment, tax setting, and commission rule actions are server-authorized and audited.
 - Frontends display backend-calculated money and never persist their own calculations.
 - Subscription cash receipts are append-only; corrections use one linked mirror reversal. Reversal never silently changes access; suspension/coverage removal is separately authorized and audited.
+- Platform subscription e-invoice source envelopes are database-derived from those immutable receipts, append-only, and owner/platform read-only. Receipt reversal creates a linked credit-note envelope.
+- B2C POS receipts cannot reference the platform B2B/B2G envelope. `prepared` means only that a provider-neutral source snapshot exists; it does not mean transmitted, accepted, delivered, accredited, or legally compliant.
+- Provider credentials/payloads are absent from the current boundary. The safe source envelope is included in the versioned tenant export so offboarding does not omit billing evidence.
 
 Required locked regression:
 

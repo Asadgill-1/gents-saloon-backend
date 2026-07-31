@@ -12,14 +12,14 @@ Product surfaces:
 - Platform dashboard for onboarding, cash subscriptions, suspension, exports, and offboarding.
 - Manual cash SaaS billing with business-wide or per-shop mode.
 
-Status: Phase 2 is active by explicit owner approval. T2.0–T2.6 are complete locally and on the Supabase development project: operation sources, booking/queue, legal documents, fiscal-year counters, cash shifts, checkout/payments, commission snapshots, balanced journal posting, append-only void/refund/credit-note reversals, advances, and closed-period payout settlement are verified. T2.7 reports and the provider-neutral e-invoicing boundary are next. Phase 1 implementation is complete, but its [dated audit](docs/security-audits/PHASE_1_2026-07-26.md) remains open for inherited credential rotation, authenticated repository-protection evidence, and a live private-Storage round trip.
+Status: Phase 2 is locally verified and committed on the recovery branch. Phase 3 is incomplete and being rebuilt; Phases 4 and 5 contain reusable visual prototypes but still use mock data and client-only mutations, so they are not complete. Phase 1 implementation remains open for inherited credential rotation, authenticated repository-protection evidence, and a live private-Storage round trip. See [START_HERE.md](START_HERE.md) for the current evidence and gates.
 
 ## Required reading
 
 1. [Current handoff](START_HERE.md)
 2. [CLAUDE.md](CLAUDE.md)
-3. [Active Phase 2 checklist](docs/phases/PHASE_2_OPERATIONS_MONEY.md)
-4. [Latest security audit](docs/security-audits/PHASE_1_2026-07-26.md)
+3. [Active Phase 3 checklist](docs/phases/PHASE_3_TELEGRAM_AI.md)
+4. [Latest completed security audit](docs/security-audits/PHASE_2_2026-07-26.md)
 5. [Security rules](docs/SECURITY.md)
 6. [Project decisions](docs/PROJECT_CONTEXT.md)
 7. [Master plan](docs/MASTER_PLAN.md)
