@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/node_modules
+backups
+tenant-exports
+tokkens.txt
+tokens.txt
+saloon-shop-dashboard
+saloon-gents-system-owner-dashboard

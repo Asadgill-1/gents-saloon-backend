@@ -15,6 +15,12 @@ dependencies = [
   "uvicorn[standard]==0.51.0",
   "aiogram==3.30.0",
   "cryptography==49.0.0",
+  "opentelemetry-distro==0.65b0",
+  "opentelemetry-exporter-otlp==1.44.0",
+  "opentelemetry-instrumentation-fastapi==0.65b0",
+  "opentelemetry-instrumentation-celery==0.65b0",
+  "opentelemetry-instrumentation-psycopg==0.65b0",
+  "opentelemetry-instrumentation-redis==0.65b0",
 ]
 
 [dependency-groups]

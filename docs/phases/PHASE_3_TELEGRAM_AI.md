@@ -2,7 +2,9 @@
 
 ## Status — 2026-07-31
 
-**Incomplete; recovery in progress.** The inherited prototype does not yet provide secure webhook hashing, durable processing recovery, database-derived role authorization, real aiogram outbox delivery, complete role/button flows, bounded AI tools/budgets, or a passing Phase 3 security audit. Its unapplied migration may be replaced by a new forward migration; the 17 applied Phase 1/2 migrations remain immutable. See [../../START_HERE.md](../../START_HERE.md).
+**Security foundation implemented; full phase incomplete.** A new forward migration and backend services now provide AES-256-GCM token envelopes, HMAC webhook-secret digests, durable update claims/deduplication/retry, database-derived role authorization, private-chat enforcement, aiogram transport, retrying outbox delivery, callback allowlisting, Redis-backed flood/AI budgets, strict AI tool schemas, redacted chat storage/retention, and authoritative rendering tests. The 17 applied Phase 1/2 migrations remain immutable.
+
+The customer/reception/barber/owner/master menus still acknowledge selections with a placeholder instead of executing every canonical flow; AI booking mutation tools deliberately fail to the secure menu instead of calling transactional booking services; multilingual menu labels/snapshots, the 201-bot load gate, full adversarial role/retry tests, live Telegram/Moonshot staging proof, and the dated security audit remain open. See [../../START_HERE.md](../../START_HERE.md).
 
 ## Outcome
 

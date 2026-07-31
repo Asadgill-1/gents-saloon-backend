@@ -35,7 +35,7 @@ All three repositories have recovery work on `codex/full-recovery`. The remote `
 - shop dashboard: `2ae5729`;
 - platform dashboard: `7c08910`.
 
-Phase 2 reports/e-invoice work is locally verified and committed on the recovery branch. The inherited Phase 3 implementation and Phase 4/5 dashboard screens do not satisfy their gates: Telegram delivery/authorization/AI containment is incomplete, and dashboard records and mutations are mock client state. Preserve the current visual styling while replacing those data paths.
+Phase 2 reports/e-invoice work is locally verified and committed on the recovery branch. Phase 3 now has a secure webhook/authorization/outbox/AI-containment foundation but not the complete canonical role flows or audit. Phase 4/5 now use real SSR authentication, backend reads/actions, pagination, and nonce CSP while retaining the visual styling; their remaining feature and E2E/audit gates are listed below.
 
 The local Phase 1/2 migration chain reconstructs successfully through `supabase/migrations/20260726122713_reports_einvoice_boundary.sql`. Fresh remote checksum reconciliation is open because this checkout is not currently linked to a Supabase project.
 
@@ -46,10 +46,10 @@ The local Phase 1/2 migration chain reconstructs successfully through `supabase/
 | Phase 0 — foundation | **Implementation and CI verified; owner gates open** | Credential rotation and GitHub repository-protection evidence remain |
 | Phase 1 — tenant and SaaS platform | **Implementation complete; audit open** | T1.0–T1.6 locally verified; T1.7 cannot pass yet |
 | Phase 2 — booking, POS, and money | **Implementation and security audit verified** | T2.0–T2.8 complete; dated Phase 2 security audit green |
-| Phase 3 — Telegram and AI | **Incomplete; recovery active** | Schema, webhook, authorization, transport, outbox delivery, AI containment, flows, and audit gates remain |
-| Phase 4 — shop dashboard | **Incomplete; visual prototype only** | Existing styling is retained, but mock data/mutations must be replaced with backend reads/actions and Playwright proof |
-| Phase 5 — platform dashboard | **Incomplete; visual prototype only** | Existing styling is retained, but SSR auth, backend operations, pagination, confirmations, and Playwright proof remain |
-| Phase 6 — production rollout | **Not started** | Requires completed prior phases, owner infrastructure/secrets, staging UAT, canaries, rollback drill, and cutover approval |
+| Phase 3 — Telegram and AI | **Security foundation built; incomplete** | Complete callback/booking flows, multilingual snapshots, 201-bot/live staging proof, adversarial matrix, and dated audit remain |
+| Phase 4 — shop dashboard | **Core operational slice built; incomplete** | Finish appointment/POS/receipt/owner/team/money flows, Playwright/axe/staging proof, and dated audit |
+| Phase 5 — platform dashboard | **Core operational slice built; incomplete** | Finish export/download/detail/security/backup/escalation flows, Playwright/axe/staging proof, and dated audit |
+| Phase 6 — production rollout | **Local baseline built; rollout not started** | Production image/Compose/release/rollback/telemetry/backup tooling and runbooks are implemented; VPS, isolated services, drills, audits, UAT, canaries, variance, cutover, and hypercare require owner-controlled execution |
 
 ## 4. What is implemented
 
@@ -343,18 +343,17 @@ Windows no longer exposes PID 11696 through `Get-Process`, CIM, or `tasklist`, s
 ## 6. Open blockers — do not call Phase 0 complete
 
 1. **Critical owner action:** revoke and replace the four Telegram bot credentials detected in local `tokkens.txt`. Values were not printed or committed. Follow [the rotation runbook](docs/SECRET_ROTATION_RUNBOOK.md).
-2. **Remote repository controls:** all three repositories are committed, pushed, and green in GitHub Actions. Branch protection, required-check enforcement, GitHub secret scanning, and push protection still require authenticated settings evidence.
-3. **Medium security follow-up:** replace the current framework-compatible inline-script CSP with nonce/hash CSP during Phase 4/5, before production.
-4. **Development MCP acceptance:** the owner explicitly requested full-write Supabase MCP access. It is project-scoped and the project is empty; switch to read-only mode or a development branch before production data exists.
-5. **Next.js MCP:** `next-devtools-mcp@0.4.0` was evaluated and removed because it introduced unresolved High npm advisories. Do not install it until an audited fixed release exists. A custom product MCP is not needed unless an approved external AI client later requires scoped platform access.
-6. **Phase 1 operational proof:** provision the Supabase service-role credential to the backend only through the approved secret channel, then prove private upload, signed download, expiry, and object deletion. OAuth MCP cannot execute Storage object operations.
+2. **Remote repository controls:** the historical `main` checkpoints are synchronized and green, but recovery work is not merged to protected `main`. The recovery branches must pass remote CI/review, and branch protection, required checks, secret scanning, and push protection still require authenticated settings evidence.
+3. **Development MCP acceptance:** the owner explicitly requested full-write Supabase MCP access. It is project-scoped and the project is empty; switch to read-only mode or a development branch before production data exists.
+4. **Next.js MCP:** `next-devtools-mcp@0.4.0` was evaluated and removed because it introduced unresolved High npm advisories. Do not install it until an audited fixed release exists. A custom product MCP is not needed unless an approved external AI client later requires scoped platform access.
+5. **Phase 1 operational proof:** provision the Supabase service-role credential to the backend only through the approved secret channel, then prove private upload, signed download, expiry, and object deletion. OAuth MCP cannot execute Storage object operations.
 
 ## 7. Exact next starting point
 
-1. Replace the unapplied Phase 3 migration with a new forward migration without changing the 17 applied Phase 1/2 migrations.
-2. Implement hashed webhook verification, durable update claiming/recovery, database-derived Telegram authorization, real aiogram delivery, and fail-closed AI containment.
-3. Add the missing shop/platform backend read and mutation interfaces, then connect both dashboards through Supabase SSR server components/actions.
-4. Complete dated Phase 3, 4, and 5 security audits before beginning Phase 6 infrastructure and cutover work.
+1. Replace each Phase 3 placeholder callback with the complete customer/reception/barber/owner/master transactional flow; connect AI booking mutations to existing idempotent booking services.
+2. Complete multilingual menu/snapshot coverage, role/adversarial/retry tests, 201-bot capacity, Telegram/Moonshot staging proof, and the dated Phase 3 security audit.
+3. Finish Phase 4/5 feature gaps and Playwright/axe matrices, then write their dated security audits.
+4. Validate the Phase 6 image/Compose on a Linux Docker host, then execute the owner-controlled isolated-environment, PITR/S3/Grafana, security/load/UAT/canary/rollback/variance/cutover gates in the production runbook.
 
 Inherited owner gates remain: rotate all four Telegram credentials; prove authenticated repository protection; perform the live private-Storage round trip; supply isolated staging/production projects, domains, VPS, and external service credentials through approved secret channels.
 

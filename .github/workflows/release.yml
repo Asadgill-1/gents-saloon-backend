@@ -1,0 +1,197 @@
+name: Build and deploy immutable backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Isolated target environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      shop_dashboard_deployment_id:
+        description: Vercel shop deployment ID already approved for this release
+        required: true
+        type: string
+      platform_dashboard_deployment_id:
+        description: Vercel platform deployment ID already approved for this release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: backend-deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: gents_saloon_release
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gents_saloon_release"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.11.26"
+          enable-cache: true
+      - name: Static, unit, and dependency gates
+        working-directory: backend
+        run: |
+          uv sync --locked --dev
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy app workers
+          uv run pytest
+          uv run pip-audit
+      - name: Reconstruct and test the complete migration chain
+        env:
+          PGURL: postgresql://postgres:test-password@localhost:5432/gents_saloon_release
+          DATABASE_URL: postgresql://postgres:test-password@localhost:5432/gents_saloon_release
+          RUN_DATABASE_INTEGRATION: "1"
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/bootstrap_local.sql
+          for migration in supabase/migrations/*.sql; do
+            psql "$PGURL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          for contract in \
+            phase1_tenant_rls.sql \
+            phase2_operations_schema.sql \
+            phase2_booking_rls.sql \
+            phase2_legal_cash_rls.sql \
+            phase2_checkout_rls.sql \
+            phase2_correction_rls.sql \
+            phase2_payout_rls.sql \
+            phase2_reports_einvoice_rls.sql \
+            phase3_telegram_rls.sql \
+            platform_onboarding_interfaces.sql; do
+            psql "$PGURL" -v ON_ERROR_STOP=1 -f "supabase/tests/${contract}"
+          done
+          cd backend
+          uv run pytest -q \
+            tests/test_context_database.py \
+            tests/test_tenant_onboarding_database.py \
+            tests/test_subscription_lifecycle_database.py \
+            tests/test_entitlement_surfaces_database.py \
+            tests/test_export_offboarding_database.py \
+            tests/test_booking_database.py \
+            tests/test_legal_cash_database.py \
+            tests/test_checkout_database.py \
+            tests/test_correction_database.py \
+            tests/test_payout_database.py
+
+  build-and-deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Validate production topology
+        env:
+          BACKEND_IMAGE: ghcr.io/example.invalid/gents-saloon/backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          ACME_EMAIL: ops@example.invalid
+          API_DOMAIN: api.example.invalid
+          REDIS_PASSWORD: validation-only
+          RUNTIME_ENV_FILE: ${{ github.workspace }}/ops/env/runtime.env.example
+        run: docker compose -f docker/compose.prod.yml config --quiet
+
+      - name: Authenticate to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "${GHCR_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Build, attest, and push
+        id: image
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          image_repository="ghcr.io/${GITHUB_REPOSITORY,,}/backend"
+          docker buildx create --name gents-saloon-builder --driver docker-container --use
+          docker buildx build \
+            --file docker/Dockerfile.backend \
+            --tag "${image_repository}:${GITHUB_SHA}" \
+            --provenance=mode=max \
+            --sbom=true \
+            --push .
+          digest="$(docker buildx imagetools inspect "${image_repository}:${GITHUB_SHA}" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "repository=${image_repository}" >>"${GITHUB_OUTPUT}"
+          echo "digest=${digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Record immutable release manifest
+        env:
+          IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          SHOP_DEPLOYMENT_ID: ${{ inputs.shop_dashboard_deployment_id }}
+          PLATFORM_DEPLOYMENT_ID: ${{ inputs.platform_dashboard_deployment_id }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          migrations="$(for file in supabase/migrations/*.sql; do sha256sum "${file}"; done | jq -Rn '[inputs | capture("^(?<sha256>[a-f0-9]{64})  supabase/migrations/(?<file>.+)$")]')"
+          jq -n \
+            --arg released_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg environment "${TARGET_ENVIRONMENT}" \
+            --arg git_sha "${GITHUB_SHA}" \
+            --arg backend_image "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}" \
+            --argjson migrations "${migrations}" \
+            --arg shop_dashboard_deployment_id "${SHOP_DEPLOYMENT_ID}" \
+            --arg platform_dashboard_deployment_id "${PLATFORM_DEPLOYMENT_ID}" \
+            '{released_at:$released_at,environment:$environment,git_sha:$git_sha,backend_image:$backend_image,migrations:$migrations,shop_dashboard_deployment_id:$shop_dashboard_deployment_id,platform_dashboard_deployment_id:$platform_dashboard_deployment_id}' \
+            >release-manifest.json
+
+      - name: Configure restricted SSH client
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "${SSH_PRIVATE_KEY}" >"${HOME}/.ssh/id_ed25519"
+          printf '%s\n' "${SSH_KNOWN_HOSTS}" >"${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/id_ed25519" "${HOME}/.ssh/known_hosts"
+
+      - name: Deploy over restricted SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh_options=(-p "${DEPLOY_PORT}" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
+          scp -P "${DEPLOY_PORT}" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            docker/compose.prod.yml docker/Caddyfile ops/deploy.sh release-manifest.json \
+            "${remote}:/opt/gents-saloon/incoming/"
+          ssh "${ssh_options[@]}" "${remote}" \
+            "bash /opt/gents-saloon/incoming/deploy.sh '${IMAGE_REPOSITORY}@${IMAGE_DIGEST}' '${GITHUB_SHA}'"

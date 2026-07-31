@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/gents-saloon/release-manifest.schema.json",
+  "title": "Gents Saloon release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "released_at",
+    "environment",
+    "git_sha",
+    "backend_image",
+    "migrations",
+    "shop_dashboard_deployment_id",
+    "platform_dashboard_deployment_id"
+  ],
+  "properties": {
+    "released_at": { "type": "string", "format": "date-time" },
+    "environment": { "enum": ["staging", "production"] },
+    "git_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "backend_image": {
+      "type": "string",
+      "pattern": "^ghcr\\.io/.+/backend@sha256:[a-f0-9]{64}$"
+    },
+    "migrations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "sha256"],
+        "properties": {
+          "file": { "type": "string", "pattern": "^[0-9]+_[a-z0-9_]+\\.sql$" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "shop_dashboard_deployment_id": { "type": "string" },
+    "platform_dashboard_deployment_id": { "type": "string" }
+  }
+}

@@ -87,40 +87,40 @@ Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the
 
 | ID | Requirement | Verification | Status |
 |---|---|---|---|
-| BOT-01 | Four bots per shop: customer, receptionist, barber crew, owner; one global master bot | Registry/onboarding tests | planned |
-| BOT-02 | Customer bot supports EN/AR/HI/UR; staff/web surfaces are English in first release | Catalog coverage tests | planned |
-| BOT-03 | All required flows have button paths; AI outage degrades to buttons | Bot E2E | planned |
-| BOT-04 | Staff bot authorization resolves bot → shop → active membership on every update | Security tests | planned |
-| BOT-05 | Outbox makes notifications retryable without duplicates | Worker/idempotency tests | planned |
-| AI-01 | AI only extracts intent and invokes allowlisted customer/booking tools | Tool contract tests | planned |
-| AI-02 | Tenant/customer context is injected server-side; model cannot choose IDs | Adversarial tests | planned |
-| AI-03 | Guardrail runs before model; unsafe input produces canned response and escalation | Adversarial tests | planned |
-| AI-04 | Price, wait, position, availability, and booking confirmations come only from tool results | Hallucination test set | planned |
+| BOT-01 | Four bots per shop: customer, receptionist, barber crew, owner; one global master bot | Registry/scope implementation built; 201-bot capacity proof open | built |
+| BOT-02 | Customer bot supports EN/AR/HI/UR; staff/web surfaces are English in first release | Four-language system messages built; translated menus/snapshots open | partial |
+| BOT-03 | All required flows have button paths; AI outage degrades to buttons | Role menus/fallback built; callback operations and Bot E2E open | partial |
+| BOT-04 | Staff bot authorization resolves bot → shop → active membership on every update | Database-truth authorization and private-chat tests | built |
+| BOT-05 | Outbox makes notifications retryable without duplicates | Claim/accept/retry/dead-letter implementation and tests; live Telegram proof open | built |
+| AI-01 | AI only extracts intent and invokes allowlisted customer/booking tools | Strict tool contract built; real booking mutations open | partial |
+| AI-02 | Tenant/customer context is injected server-side; model cannot choose IDs | Foreign-ID schema rejection test | built |
+| AI-03 | Guardrail runs before model; unsafe input produces canned response and escalation | Injection/link/PAN/size fixtures and fail-closed budgets built; complete escalation flow open | partial |
+| AI-04 | Price, wait, position, availability, and booking confirmations come only from tool results | Authoritative rendering fixture built; complete fact/hallucination set open | partial |
 
 ## Frontends and platform operations
 
 | ID | Requirement | Verification | Status |
 |---|---|---|---|
-| WEB-01 | Shop dashboard opens to authorized context, supports business aggregate for owner, and shop switcher | Playwright role matrix | planned |
-| WEB-02 | Reception/POS controls are touch-first and only operate on selected authorized shop | Playwright + API auth tests | planned |
-| WEB-03 | Frontend mutations use FastAPI; Supabase client access is read/Realtime only | Static check + network E2E | planned |
+| WEB-01 | Shop dashboard opens to authorized context, supports business aggregate for owner, and shop switcher | Real context/switcher built; aggregate and Playwright role matrix open | partial |
+| WEB-02 | Reception/POS controls are touch-first and only operate on selected authorized shop | Core queue/cash/checkout actions built; complete POS and Playwright open | partial |
+| WEB-03 | Frontend mutations use FastAPI; Supabase client access is read/Realtime only | Server actions and read-only Realtime built; network E2E open | built |
 | WEB-04 | Suspension/archive states replace operational UI consistently | Server shell and neutral contract mapping built; Playwright product matrix remains Phase 4 | built |
-| ADM-01 | Platform dashboard is business-first and manages shops beneath a business | Admin E2E | planned |
-| ADM-02 | Platform dashboard records cash subscription receipts and shows due/expired status | Admin E2E | planned |
-| ADM-03 | Platform dashboard performs audited suspend/resume/export/offboarding | Admin E2E | planned |
-| ADM-04 | Health page covers API, worker, database, Redis, outbox, and all registered bots | Fault-injection test | planned |
+| ADM-01 | Platform dashboard is business-first and manages shops beneath a business | Tenant/shop/staff/bot/legal operations built; detail discovery and E2E open | partial |
+| ADM-02 | Platform dashboard records cash subscription receipts and shows due/expired status | Real receipt/reversal/subscription reads/actions built; E2E open | built |
+| ADM-03 | Platform dashboard performs audited suspend/resume/export/offboarding | Suspend/resume/delivery/archive built; export request/download/checksum and E2E open | partial |
+| ADM-04 | Health page covers API, worker, database, Redis, outbox, and all registered bots | Paginated bot health built; complete dependency health/fault injection open | partial |
 
 ## Production, privacy, and operations
 
 | ID | Requirement | Verification | Status |
 |---|---|---|---|
-| OPS-01 | Exact-origin CORS, secure headers, verified JWTs, RLS on every table, no direct tenant mutation | Security suite | planned |
-| OPS-02 | Logs/traces/metrics are structured, redact PII/secrets, and carry request/tenant correlation IDs | Log inspection | planned |
-| OPS-03 | Database backups achieve RPO ≤ 15 minutes and restore drill achieves RTO ≤ 4 hours | Timed restore record | planned |
+| OPS-01 | Exact-origin CORS, secure headers, verified JWTs, RLS on every table, no direct tenant mutation | Security suite | built |
+| OPS-02 | Logs/traces/metrics are structured, redact PII/secrets, and carry request/tenant correlation IDs | OTLP baseline built; live Grafana/redaction inspection open | built |
+| OPS-03 | Database backups achieve RPO ≤ 15 minutes and restore drill achieves RTO ≤ 4 hours | Encrypted recovery tooling/runbook built; Supabase PITR and timed restore evidence open | built |
 | OPS-04 | Load test supports 50 active shops, 200 shop bots, and one master bot at agreed traffic profile | Load report | planned |
-| OPS-05 | Dependency, secret, migration, unit, integration, E2E, accessibility, and security checks run in CI | Protected-branch evidence | planned |
+| OPS-05 | Dependency, secret, migration, unit, integration, E2E, accessibility, and security checks run in CI | Backend gates/release workflow built; dashboard E2E/accessibility and protected-branch evidence open | partial |
 | OPS-06 | UAE VAT invoice/record-retention and e-invoicing readiness are documented and reviewed before launch | Compliance checklist | planned |
-| OPS-07 | Privacy notice, lawful-purpose data map, export/anonymization workflow, and incident runbook exist | Owner sign-off | planned |
+| OPS-07 | Privacy notice, lawful-purpose data map, export/anonymization workflow, and incident runbook exist | Incident runbook built; privacy inventory/notice and owner sign-off open | partial |
 | OPS-08 | Authenticated, privileged platform, and public routes use distributed rate limits that fail closed when Redis is unavailable | Redis limiter unit tests plus production fault injection | built |
 
 ## Deferred
