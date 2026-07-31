@@ -1,3 +1,4 @@
+import base64
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -38,12 +39,19 @@ class Settings(BaseSettings):
     celery_broker_url: SecretStr = SecretStr("redis://:local-dev-password@localhost:6379/0")
     celery_result_backend: SecretStr = SecretStr("redis://:local-dev-password@localhost:6379/0")
 
-    master_bot_token: SecretStr = SecretStr("")
-    platform_admin_telegram_ids: str = ""
     moonshot_api_key: SecretStr = SecretStr("")
     moonshot_base_url: str = ""
     moonshot_model: str = ""
     token_encryption_key: SecretStr = SecretStr("")
+    telegram_webhook_hmac_key: SecretStr = SecretStr("")
+    telegram_webhook_max_body_bytes: int = Field(default=1_048_576, ge=1024, le=1_048_576)
+    telegram_update_max_attempts: int = Field(default=5, ge=1, le=10)
+    telegram_update_stale_seconds: int = Field(default=120, ge=30, le=900)
+    telegram_update_retention_hours: int = Field(default=24, ge=24, le=72)
+    telegram_flood_limit_per_minute: int = Field(default=20, ge=1, le=100)
+    moonshot_timeout_seconds: float = Field(default=5.0, gt=0, le=5.0)
+    ai_user_shop_hourly_budget: int = Field(default=20, ge=1, le=1000)
+    ai_platform_daily_budget: int = Field(default=5000, ge=1, le=100000)
     export_storage_bucket: str = "tenant-exports"
     export_download_ttl_seconds: int = Field(default=900, ge=60, le=900)
     export_retention_hours: int = Field(default=72, ge=1, le=168)
@@ -77,6 +85,18 @@ class Settings(BaseSettings):
         if self.supabase_jwks_timeout_seconds <= 0:
             raise ValueError("SUPABASE_JWKS_TIMEOUT_SECONDS must be greater than zero")
 
+        for name, value in (
+            ("TOKEN_ENCRYPTION_KEY", self.token_encryption_key.get_secret_value()),
+            ("TELEGRAM_WEBHOOK_HMAC_KEY", self.telegram_webhook_hmac_key.get_secret_value()),
+        ):
+            if value:
+                try:
+                    decoded = base64.b64decode(value, altchars=b"-_", validate=True)
+                except ValueError as exc:
+                    raise ValueError(f"{name} must be valid base64") from exc
+                if len(decoded) != 32:
+                    raise ValueError(f"{name} must decode to exactly 32 bytes")
+
         if self.env == "production":
             if self.log_level == "DEBUG":
                 raise ValueError("Production LOG_LEVEL cannot be DEBUG")
@@ -86,8 +106,8 @@ class Settings(BaseSettings):
                 "SUPABASE_ANON_KEY": self.supabase_anon_key.get_secret_value(),
                 "SUPABASE_SERVICE_ROLE_KEY": self.supabase_service_role_key.get_secret_value(),
                 "WEBHOOK_BASE_URL": self.webhook_base_url,
-                "MASTER_BOT_TOKEN": self.master_bot_token.get_secret_value(),
                 "TOKEN_ENCRYPTION_KEY": self.token_encryption_key.get_secret_value(),
+                "TELEGRAM_WEBHOOK_HMAC_KEY": self.telegram_webhook_hmac_key.get_secret_value(),
                 "EXPORT_STORAGE_BUCKET": self.export_storage_bucket,
             }
             missing = [name for name, value in required.items() if not value]

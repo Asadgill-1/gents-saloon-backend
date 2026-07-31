@@ -132,6 +132,14 @@ try {
         throw "Phase 2 report/e-invoice RLS tests failed."
     }
 
+    $phase3TelegramTests = Join-Path $projectRoot `
+        "supabase\tests\phase3_telegram_rls.sql"
+    & $psql -X -w -v ON_ERROR_STOP=1 -h $postgresHost -p $postgresPort `
+        -U $postgresUser -d $testDatabase -f $phase3TelegramTests
+    if ($LASTEXITCODE -ne 0) {
+        throw "Phase 3 Telegram/AI RLS tests failed."
+    }
+
     $integrationDatabaseUrl = $databaseUrl -replace `
         "/[^/?]+(?=(?:\?|$))", "/$testDatabase"
     $env:DATABASE_URL = $integrationDatabaseUrl
@@ -169,7 +177,7 @@ try {
         }
     }
 
-    Write-Host "Phase 1/2 database reconstruction and RLS tests PASS."
+    Write-Host "Phase 1-3 database reconstruction and RLS tests PASS."
 }
 finally {
     Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue

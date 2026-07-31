@@ -13,6 +13,7 @@ celery_app = Celery(
         "workers.bookings",
         "workers.health",
         "workers.subscriptions",
+        "workers.telegram_outbox",
         "workers.tenant_exports",
     ],
 )
@@ -41,6 +42,10 @@ celery_app.conf.update(
         "maintain-bookings": {
             "task": "workers.bookings.maintain",
             "schedule": crontab(minute="*"),
+        },
+        "process-telegram": {
+            "task": "workers.telegram.process",
+            "schedule": 5.0,
         },
     },
 )

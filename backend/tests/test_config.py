@@ -1,7 +1,11 @@
+import base64
+
 import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
+
+TEST_KEY = base64.b64encode(b"k" * 32).decode()
 
 
 def test_development_defaults_are_safe_and_parse_origins() -> None:
@@ -25,8 +29,8 @@ def test_production_rejects_insecure_origins() -> None:
             supabase_anon_key="anon",
             supabase_service_role_key="service",
             webhook_base_url="https://api.example.com",
-            master_bot_token="placeholder",
-            token_encryption_key="placeholder",
+            token_encryption_key=TEST_KEY,
+            telegram_webhook_hmac_key=TEST_KEY,
             _env_file=None,
         )
 
@@ -43,8 +47,8 @@ def test_production_rejects_insecure_supabase_url() -> None:
             supabase_url="http://example.supabase.co",
             supabase_anon_key="anon",
             supabase_service_role_key="service",
-            master_bot_token="placeholder",
-            token_encryption_key="placeholder",
+            token_encryption_key=TEST_KEY,
+            telegram_webhook_hmac_key=TEST_KEY,
             _env_file=None,
         )
 
