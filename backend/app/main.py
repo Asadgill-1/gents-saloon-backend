@@ -16,10 +16,13 @@ from app.api.health import router as health_router
 from app.api.legal_cash import router as legal_cash_router
 from app.api.payouts import router as payouts_router
 from app.api.platform.exports import router as platform_exports_router
+from app.api.platform.onboarding import router as platform_onboarding_router
+from app.api.platform.reads import router as platform_reads_router
 from app.api.platform.subscriptions import router as platform_subscriptions_router
 from app.api.platform.tenants import router as platform_tenants_router
 from app.api.public import router as public_router
 from app.api.reports import router as reports_router
+from app.api.shop_reads import router as shop_reads_router
 from app.api.telegram import router as telegram_router
 from app.api.tenant import router as tenant_router
 from app.core.auth import JwtVerifier
@@ -88,10 +91,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(corrections_router)
     app.include_router(payouts_router)
     app.include_router(reports_router)
+    app.include_router(shop_reads_router)
     app.include_router(legal_cash_router)
     app.include_router(platform_tenants_router)
     app.include_router(platform_subscriptions_router)
     app.include_router(platform_exports_router)
+    app.include_router(platform_onboarding_router)
+    app.include_router(platform_reads_router)
     app.include_router(tenant_router)
     app.include_router(telegram_router)
     app.include_router(public_router)

@@ -22,7 +22,9 @@ from app.core.telegram import (
     AiogramTelegramTransport,
     decode_base64_key,
     decrypt_bot_token,
+    decrypt_envelope,
     safe_telegram_error_code,
+    webhook_secret_associated_data,
 )
 from app.services.bot_service import (
     TelegramUpdateError,
@@ -50,6 +52,13 @@ class TelegramOutboundPayload(BaseModel):
     keyboard: InlineKeyboardMarkup | None = None
 
 
+class TelegramRegistrationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bot_id: UUID
+    webhook_url: str = Field(min_length=12, max_length=2048, pattern=r"^https://")
+
+
 @dataclass(frozen=True)
 class ClaimedOutboxEvent:
     event_id: UUID
@@ -59,6 +68,19 @@ class ClaimedOutboxEvent:
     role: str
     token_envelope: str
     payload: TelegramOutboundPayload
+    attempt_count: int
+
+
+@dataclass(frozen=True)
+class ClaimedRegistrationEvent:
+    event_id: UUID
+    bot_id: UUID
+    business_id: UUID | None
+    shop_id: UUID | None
+    role: str
+    token_envelope: str
+    webhook_secret_envelope: str
+    payload: TelegramRegistrationPayload
     attempt_count: int
 
 
@@ -113,7 +135,65 @@ async def _claim_next_outbox(pool: Any) -> ClaimedOutboxEvent | None:
         )
 
 
-async def _mark_outbox_delivered(pool: Any, event: ClaimedOutboxEvent, message_id: int) -> None:
+async def _claim_next_registration(pool: Any) -> ClaimedRegistrationEvent | None:
+    async with pool.connection(timeout=5) as connection, connection.transaction():
+        await connection.execute("set local statement_timeout = '5s'")
+        cursor = await connection.execute(
+            """
+            select e.id, b.id, b.business_id, b.shop_id, b.role::text,
+                   b.token_ciphertext, b.webhook_secret_ciphertext,
+                   e.payload, e.attempt_count
+            from public.outbox_events e
+            join public.bots b
+              on b.id = (e.payload->>'bot_id')::uuid and b.active
+            where e.topic = 'telegram.register_webhook'
+              and b.webhook_secret_ciphertext is not null
+              and e.dead_at is null
+              and e.attempt_count < %s
+              and (
+                (e.status in ('pending', 'failed') and e.available_at <= now())
+                or (e.status = 'processing'
+                    and e.locked_at < now() - (%s * interval '1 second'))
+              )
+            order by e.created_at, e.id
+            limit 1
+            for update of e skip locked
+            """,
+            (OUTBOX_MAX_ATTEMPTS, OUTBOX_STALE_SECONDS),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        payload = TelegramRegistrationPayload.model_validate(row[7])
+        if payload.bot_id != UUID(str(row[1])):
+            raise ValueError("telegram_registration_bot_mismatch")
+        await connection.execute(
+            """
+            update public.outbox_events
+            set status = 'processing', locked_at = now(),
+                attempt_count = attempt_count + 1, last_error_code = null
+            where id = %s
+            """,
+            (row[0],),
+        )
+        return ClaimedRegistrationEvent(
+            event_id=UUID(str(row[0])),
+            bot_id=UUID(str(row[1])),
+            business_id=UUID(str(row[2])) if row[2] is not None else None,
+            shop_id=UUID(str(row[3])) if row[3] is not None else None,
+            role=str(row[4]),
+            token_envelope=str(row[5]),
+            webhook_secret_envelope=str(row[6]),
+            payload=payload,
+            attempt_count=int(row[8]) + 1,
+        )
+
+
+async def _mark_outbox_delivered(
+    pool: Any,
+    event: ClaimedOutboxEvent | ClaimedRegistrationEvent,
+    message_id: int | None,
+) -> None:
     async with pool.connection(timeout=5) as connection, connection.transaction():
         await connection.execute(
             """
@@ -128,7 +208,7 @@ async def _mark_outbox_delivered(pool: Any, event: ClaimedOutboxEvent, message_i
 
 async def _mark_outbox_failed(
     pool: Any,
-    event: ClaimedOutboxEvent,
+    event: ClaimedOutboxEvent | ClaimedRegistrationEvent,
     *,
     error_code: str,
     permanent: bool,
@@ -195,6 +275,61 @@ async def deliver_next_outbox(pool: Any, *, encryption_key: bytes) -> bool:
     return True
 
 
+async def register_next_webhook(pool: Any, *, encryption_key: bytes) -> bool:
+    event = await _claim_next_registration(pool)
+    if event is None:
+        return False
+    try:
+        token = decrypt_bot_token(
+            event.token_envelope,
+            key=encryption_key,
+            bot_id=event.bot_id,
+            role=event.role,
+            business_id=event.business_id,
+            shop_id=event.shop_id,
+        )
+        secret = decrypt_envelope(
+            event.webhook_secret_envelope,
+            key=encryption_key,
+            associated_data=webhook_secret_associated_data(bot_id=event.bot_id),
+        ).decode()
+        async with AiogramTelegramTransport(token) as transport:
+            await transport.set_webhook(event.payload.webhook_url, secret_token=secret)
+        async with pool.connection(timeout=5) as connection, connection.transaction():
+            await connection.execute(
+                """
+                update public.bots
+                set healthy = true, registered_at = now(), last_health_at = now()
+                where id = %s and active
+                """,
+                (event.bot_id,),
+            )
+        await _mark_outbox_delivered(pool, event, None)
+    except TelegramRetryAfter as exc:
+        await _mark_outbox_failed(
+            pool,
+            event,
+            error_code="telegram_retry_after",
+            permanent=False,
+            retry_after=int(exc.retry_after),
+        )
+    except (TelegramUnauthorizedError, TelegramForbiddenError, TelegramBadRequest) as exc:
+        await _mark_outbox_failed(
+            pool,
+            event,
+            error_code=safe_telegram_error_code(exc),
+            permanent=True,
+        )
+    except Exception as exc:
+        await _mark_outbox_failed(
+            pool,
+            event,
+            error_code=safe_telegram_error_code(exc),
+            permanent=False,
+        )
+    return True
+
+
 async def _process_telegram() -> dict[str, int]:
     settings = get_settings()
     encryption_key = decode_base64_key(settings.token_encryption_key.get_secret_value())
@@ -216,6 +351,7 @@ async def _process_telegram() -> dict[str, int]:
     )
     processed_updates = 0
     delivered_events = 0
+    registered_webhooks = 0
     try:
         for _ in range(50):
             claimed = await claim_next_update(
@@ -255,6 +391,10 @@ async def _process_telegram() -> dict[str, int]:
                 )
             processed_updates += 1
 
+        for _ in range(25):
+            if not await register_next_webhook(pool, encryption_key=encryption_key):
+                break
+            registered_webhooks += 1
         for _ in range(100):
             if not await deliver_next_outbox(pool, encryption_key=encryption_key):
                 break
@@ -266,6 +406,7 @@ async def _process_telegram() -> dict[str, int]:
         return {
             "processed_updates": processed_updates,
             "delivered_events": delivered_events,
+            "registered_webhooks": registered_webhooks,
             "purged_updates": retention["updates"],
             "purged_chat_messages": retention["chat_messages"],
         }
@@ -287,4 +428,5 @@ __all__ = [
     "TelegramOutboundPayload",
     "deliver_next_outbox",
     "process_telegram",
+    "register_next_webhook",
 ]

@@ -140,6 +140,14 @@ try {
         throw "Phase 3 Telegram/AI RLS tests failed."
     }
 
+    $platformOnboardingTests = Join-Path $projectRoot `
+        "supabase\tests\platform_onboarding_interfaces.sql"
+    & $psql -X -w -v ON_ERROR_STOP=1 -h $postgresHost -p $postgresPort `
+        -U $postgresUser -d $testDatabase -f $platformOnboardingTests
+    if ($LASTEXITCODE -ne 0) {
+        throw "Platform onboarding interface RLS tests failed."
+    }
+
     $integrationDatabaseUrl = $databaseUrl -replace `
         "/[^/?]+(?=(?:\?|$))", "/$testDatabase"
     $env:DATABASE_URL = $integrationDatabaseUrl

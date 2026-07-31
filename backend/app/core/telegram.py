@@ -39,6 +39,8 @@ class TelegramTransport(Protocol):
         show_alert: bool = False,
     ) -> None: ...
 
+    async def set_webhook(self, url: str, *, secret_token: str) -> None: ...
+
 
 def _b64url_encode(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
@@ -95,6 +97,10 @@ def bot_token_associated_data(
 
 def update_associated_data(*, bot_id: UUID, update_id: int) -> bytes:
     return f"telegram-update:v1:{bot_id}:{update_id}".encode()
+
+
+def webhook_secret_associated_data(*, bot_id: UUID) -> bytes:
+    return f"telegram-webhook-secret:v1:{bot_id}".encode()
 
 
 def encrypt_bot_token(
@@ -214,6 +220,16 @@ class AiogramTelegramTransport:
             show_alert=show_alert,
         )
 
+    async def set_webhook(self, url: str, *, secret_token: str) -> None:
+        accepted = await self._bot.set_webhook(
+            url=url,
+            secret_token=secret_token,
+            allowed_updates=["message", "callback_query"],
+            drop_pending_updates=False,
+        )
+        if not accepted:
+            raise RuntimeError("telegram_webhook_rejected")
+
 
 def safe_telegram_error_code(exc: BaseException) -> str:
     name = type(exc).__name__.lower()
@@ -243,4 +259,5 @@ __all__ = [
     "safe_telegram_error_code",
     "update_associated_data",
     "verify_telegram_webhook_secret",
+    "webhook_secret_associated_data",
 ]
