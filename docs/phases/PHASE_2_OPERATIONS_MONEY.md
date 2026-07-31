@@ -11,8 +11,10 @@ Phase 1 implementation is locally verified, but its inherited credential/remote 
 - Complete: T2.2 booking, holds, availability, and queue.
 - Complete: T2.3 legal documents, receipt counters, and cash shifts.
 - Complete: T2.4 checkout, payments, commission snapshots, and balanced journal.
+- Complete: T2.5 voids, refunds, credit notes, and reversing journal.
 - Complete: T2.6 advances, payout runs, and settlement.
-- Next: T2.7 reports and the provider-neutral e-invoicing boundary.
+- Complete: T2.7 reports and the provider-neutral e-invoicing boundary.
+- Complete: T2.8 full Phase 2 security audit and handoff (`docs/security-audits/PHASE_2_2026-07-26.md`).
 
 ## Outcome
 
@@ -402,18 +404,73 @@ T2.6 security checkpoint:
 
 ### T2.7 — Reports and provider-neutral e-invoicing boundary
 
-Implement:
+**Complete locally and on the Supabase development project.** Contract locked
+before coding on 2026-07-26.
 
-- cursor-paginated shop/owner operational and financial reports from stored snapshots;
-- owner cross-shop aggregate with strict business authorization;
-- e-invoice document/outbox status boundary for in-scope platform B2B/B2G documents;
-- no provider SDK until the owner selects an accredited service provider.
+#### T2.7.1 — Shop report
+
+- Add `GET /api/v1/businesses/{business_id}/shops/{shop_id}/reports`.
+- Require timezone-aware `period_start`/`period_end`, use the half-open UTC range `[start,end)`, reject periods over 366 days, and cap `limit` at 100.
+- Authorize only an active business owner, assigned-shop manager, or platform administrator. Receptionists and barbers do not receive general financial/commission reports.
+- Return current-period operational counts, stored sale/correction/payment totals, cash movement/shift reconciliation, advance/payout totals, balanced journal totals, and a cursor-paginated per-barber breakdown.
+- Use stable keyset pagination by barber membership UUID. A cursor is only a locator; every query remains explicitly business/shop scoped.
+
+#### T2.7.2 — Business overview
+
+- Add `GET /api/v1/businesses/{business_id}/overview`.
+- Authorize only the active business owner or platform administrator; a manager assigned to one shop cannot infer other shops or the business aggregate.
+- Return an aggregate over currently entitled active shops plus a cursor-paginated shop breakdown ordered by shop UUID. In per-shop billing mode, a paused shop is excluded; if no shop is entitled the request fails with the generic subscription response.
+- Derive both aggregate and rows from the same stored transaction/correction/cash/payout/journal facts and the same `[start,end)` contract.
+
+#### T2.7.3 — Query and schema support
+
+- Query the normalized authoritative tables directly. Do not add report caches, stored totals, materialized views, or Celery aggregation truth.
+- Add only the composite indexes required for period filters and keyset order. Every new foreign key must have a usable leading index.
+- Preserve separate commission/payment visibility in browser RLS; reports are trusted FastAPI responses after repeated database authorization.
+
+#### T2.7.4 — Provider-neutral e-invoice boundary
+
+- Add one forced-RLS `e_invoice_documents` source-envelope table linked exclusively to `subscription_cash_receipts`.
+- Automatically prepare one immutable platform-billing document per original receipt or reversal in the same transaction. Original receipts map to `invoice`; reversals map to `credit_note`.
+- Store only versioned platform billing source facts derived from PostgreSQL: tenant buyer snapshot, amount/currency, coverage, receipt identity, and reversal link. Status remains `prepared` until platform legal configuration and an Accredited Service Provider are selected.
+- Write a dedicated audit/outbox event containing identifiers and scope, never a provider credential or unapproved provider payload.
+- Current tenant customers are business buyers, so the implemented source is B2B. The enum reserves B2G for a future verified government buyer; there is no client-controlled scope switch.
+- A shop POS transaction/receipt cannot reference this table. B2C service receipts and credit notes remain exclusively in the POS document flow.
+- Do not add XML/PINT-AE generation, provider callbacks, delivery claims, provider SDKs, or “compliant” labels in this task.
+
+#### T2.7.5 — Verification and security checkpoint
+
+- Prove exact report reconciliation against sale, correction, payment, cash movement/shift, advance, payout, and journal fixtures.
+- Prove stable multi-page keyset traversal without duplicates or omissions and hard-limit/period validation.
+- Prove receptionist/barber/manager/owner/platform/other-owner access and cross-business/shop IDOR isolation.
+- Prove concurrent/same-key receipt recording creates one cash receipt and one e-invoice source envelope; reversal creates one credit-note envelope.
+- Prove forced RLS, read-only browser grants, append-only documents, no B2C source column/FK, no missing foreign-key index, and no exposed private helper.
+- Run clean reconstruction, backend quality/dependency checks, current/history secret scans, Supabase advisors, over-engineering review, and ponytail debt scan.
 
 Gates:
 
 - reports reconcile to transactions, corrections, shifts, payouts, and journal;
 - another business/shop cannot infer totals or identifiers;
 - B2C service receipts are not incorrectly sent to the B2B/B2G adapter.
+
+T2.7 completion evidence:
+
+- `GET /api/v1/businesses/{business_id}/shops/{shop_id}/reports` returns a direct normalized PostgreSQL projection for an owner, assigned manager, or platform administrator. The half-open UTC period is required and capped at 366 days; barber rows use stable membership-UUID keyset pagination capped at 100. Aggregate and row queries share one repeatable-read snapshot.
+- `GET /api/v1/businesses/{business_id}/overview` is owner/platform-only and aggregates only currently entitled active shops. It uses stable shop-UUID keyset pagination, so a manager cannot infer sibling-shop or business totals and an expired per-shop subscription cannot leak paused-shop data.
+- Exact integration fixtures reconcile one sale, partial correction, cash tender/refund, advance, paid payout, per-barber commission/tip/reversal, and balanced journal. Multi-page traversal equals the one-page result without duplicates or omissions.
+- Local migration `20260726122713_reports_einvoice_boundary.sql` creates the forced-RLS append-only `e_invoice_documents` boundary plus only the report-period/FK indexes used by the new access paths. Remote migration `20260726130318_reports_einvoice_boundary` is applied.
+- One database trigger prepares exactly one immutable `invoice` envelope for every platform subscription cash receipt and one linked `credit_note` envelope for its reversal. The only implemented scope/status is database-derived B2B `prepared`; B2G is reserved, and no B2C POS/customer FK, provider payload, XML, callback, SDK, or delivery claim exists.
+- The receipt transaction also writes a dedicated audit row and outbox event. Private preparation/validation helpers are not executable by browser or service roles; authenticated browser access is owner/platform read-only through RLS.
+- Tenant export schema `2026-07-26.v2` includes an explicit safe `e_invoice_documents` JSON/CSV dataset, preserving the export-first offboarding contract without exporting provider credentials or unapproved provider payloads.
+- Clean reconstruction passes all Phase 1/2 migrations, eight SQL/RLS suites, and 13 database integration tests. Backend gates pass Ruff lint/format, strict mypy for 42 source files, 76 collected tests (63 normal passes plus 13 expected database-gated skips), lock validation, and `pip-audit` with no known vulnerability.
+- Both dashboard dependency audits remain at zero vulnerabilities. A checksum-verified official Gitleaks 8.30.1 fallback was used because the local CLI was absent and Docker Desktop could not start; all current source and all three Git histories report zero leaks.
+- Remote verification reports 17 migrations, 46/46 public tables forced-RLS, zero e-invoice/tenant/financial rows, nine controlled journal accounts, zero browser mutation policy, zero forbidden B2C/provider column, zero missing e-invoice FK index, and zero exposed private helper. Supabase Security Advisor reports zero findings; Performance Advisor is INFO-only for unused indexes on the empty project.
+
+T2.7 security checkpoint:
+
+- **Pass for this task checkpoint:** no unresolved Critical or High finding was found in the report/e-invoice/export change. This does not replace the mandatory dated Phase 2 audit at T2.8.
+- Authorization is repeated from PostgreSQL, report queries remain parameterized and tenant-scoped, subscription enforcement fails closed, mutation authority stays server-side, and no secret, unsafe serializer, dynamic execution, permissive RLS policy, security-definer helper, or new dependency was introduced.
+- The over-engineering review found no useful deletion or dependency reduction: the long SQL projections encode concrete normalized aggregates and avoid a cache/materialized-view/Celery truth layer. The debt scan found no new marker; the existing T2.2 shop-lock marker remains the single Phase 2 item.
 
 ### T2.8 — Phase security audit and handoff
 

@@ -24,7 +24,7 @@ from app.services.platform_operations import (
     write_platform_event,
 )
 
-EXPORT_SCHEMA_VERSION = "2026-07-26.v1"
+EXPORT_SCHEMA_VERSION = "2026-07-26.v2"
 EXPORT_FORMAT = "zip_json_csv"
 EXPORT_CONTENT_TYPE = "application/zip"
 SENSITIVE_KEY_PATTERN = re.compile(
@@ -268,6 +268,7 @@ async def _load_export_datasets(
         (business_id,) if scope == "business" else (business_id, shop_id)
     )
     receipt_filter = "r.business_id = %s" if scope == "business" else "r.shop_id = %s"
+    e_invoice_filter = "d.business_id = %s" if scope == "business" else "r.shop_id = %s"
     audit_filter = "a.business_id = %s" if scope == "business" else "a.shop_id = %s"
 
     specs = [
@@ -356,6 +357,23 @@ async def _load_export_datasets(
             from public.subscription_cash_receipts r
             where {receipt_filter}
             order by r.receipt_sequence
+            """,
+            (business_id if scope == "business" else shop_id,),
+        ),
+        (
+            "e_invoice_documents",
+            f"""
+            select d.id, d.business_id, d.subscription_cash_receipt_id,
+                   d.reversal_of_document_id, d.document_type::text,
+                   d.transaction_scope::text, d.status::text,
+                   d.source_schema_version, d.currency, d.amount,
+                   d.source_snapshot, d.prepared_at
+            from public.e_invoice_documents d
+            join public.subscription_cash_receipts r
+              on r.id = d.subscription_cash_receipt_id
+             and r.business_id = d.business_id
+            where {e_invoice_filter}
+            order by d.prepared_at, d.id
             """,
             (business_id if scope == "business" else shop_id,),
         ),

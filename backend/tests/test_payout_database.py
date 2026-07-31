@@ -30,6 +30,11 @@ from app.services.payout_service import (
     grant_advance,
     pay_payout_run,
 )
+from app.services.report_service import (
+    ReportAccessDeniedError,
+    get_business_overview,
+    get_shop_report,
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
@@ -41,8 +46,10 @@ OWNER_ID = UUID("00000000-0000-0000-0000-000000000002")
 RECEPTIONIST_ID = UUID("00000000-0000-0000-0000-000000000003")
 OTHER_OWNER_ID = UUID("00000000-0000-0000-0000-000000000004")
 BARBER_ID = UUID("00000000-0000-0000-0000-000000000005")
+MANAGER_ID = UUID("00000000-0000-0000-0000-000000000010")
 BUSINESS_ID = UUID("10000000-0000-0000-0000-000000000001")
 SHOP_ID = UUID("20000000-0000-0000-0000-000000000001")
+REPORT_SHOP_ID = UUID("20000000-0000-0000-0000-000000000004")
 SERVICE_ID = UUID("70500000-0000-0000-0000-000000000001")
 BOOKING_ID = UUID("70600000-0000-0000-0000-000000000001")
 BOOKING_SERVICE_ID = UUID("70700000-0000-0000-0000-000000000001")
@@ -55,6 +62,46 @@ PERIOD_END = datetime(2026, 8, 11, 0, 0, tzinfo=UTC)
 
 async def _seed_booking(pool: object) -> UUID:
     async with pool.connection(timeout=5) as connection, connection.transaction():  # type: ignore[attr-defined]
+        await connection.execute(
+            """
+            insert into auth.users (id, email)
+            values (%s, 'report-manager@example.test')
+            on conflict (id) do nothing
+            """,
+            (MANAGER_ID,),
+        )
+        await connection.execute(
+            """
+            insert into public.user_profiles (auth_user_id, display_name)
+            values (%s, 'Report Manager')
+            on conflict (auth_user_id) do nothing
+            """,
+            (MANAGER_ID,),
+        )
+        await connection.execute(
+            """
+            insert into public.shops (
+              id, business_id, name, internal_code, public_queue_token_hash,
+              open_time, close_time, default_service_minutes, eod_time
+            )
+            values (
+              %s, %s, 'Report Shop', 'AR',
+              'report-shop-public-token-hash',
+              '09:00', '23:00', 30, '23:30'
+            )
+            on conflict (id) do nothing
+            """,
+            (REPORT_SHOP_ID, BUSINESS_ID),
+        )
+        await connection.execute(
+            """
+            insert into public.shop_memberships (
+              business_id, shop_id, auth_user_id, role, display_name
+            )
+            values (%s, %s, %s, 'manager', 'Report Manager')
+            """,
+            (BUSINESS_ID, SHOP_ID, MANAGER_ID),
+        )
         membership_cursor = await connection.execute(
             """
             select id
@@ -461,6 +508,160 @@ async def _exercise_payout_contracts() -> None:
         assert await _visible_counts(pool, OWNER_ID) == (1, 2, 2, 1)
         assert await _visible_counts(pool, OTHER_OWNER_ID) == (0, 0, 0, 0)
         assert await _visible_counts(pool, PLATFORM_ID) == (1, 2, 2, 1)
+
+        report_start = datetime(2026, 8, 10, tzinfo=UTC)
+        report_end = datetime(2026, 8, 13, tzinfo=UTC)
+        report = await get_shop_report(
+            pool,
+            actor_id=OWNER_ID,
+            business_id=BUSINESS_ID,
+            shop_id=SHOP_ID,
+            period_start=report_start,
+            period_end=report_end,
+            cursor=None,
+            limit=100,
+        )
+        assert report.totals.bookings_completed == 1
+        assert report.totals.sale_count == 1
+        assert report.totals.sale_grand == Decimal("130.00")
+        assert report.totals.correction_count == 1
+        assert report.totals.correction_grand == Decimal("65.00")
+        assert report.totals.net_grand == Decimal("65.00")
+        assert report.totals.cash_tender == Decimal("130.00")
+        assert report.totals.cash_refunds == Decimal("65.00")
+        assert report.totals.advance_cash == Decimal("5.00")
+        assert report.totals.payout_cash == Decimal("20.00")
+        assert report.totals.payout_gross == Decimal("25.00")
+        assert report.totals.payout_advance_deduction == Decimal("5.00")
+        assert report.totals.payout_net_paid == Decimal("20.00")
+        assert report.totals.advance_outstanding == Decimal("0.00")
+        assert report.totals.journal_debit == report.totals.journal_credit
+        assert report.totals.journal_balanced
+        barber_row = next(
+            row for row in report.barbers if row.barber_membership_id == barber_membership_id
+        )
+        assert barber_row.commission_earnings == Decimal("36.00")
+        assert barber_row.commission_reversals == Decimal("18.00")
+        assert barber_row.tip_earnings == Decimal("10.00")
+        assert barber_row.tip_reversals == Decimal("5.00")
+        assert barber_row.payout_net_paid == Decimal("20.00")
+
+        first_page = await get_shop_report(
+            pool,
+            actor_id=MANAGER_ID,
+            business_id=BUSINESS_ID,
+            shop_id=SHOP_ID,
+            period_start=report_start,
+            period_end=report_end,
+            cursor=None,
+            limit=1,
+        )
+        assert len(first_page.barbers) == 1
+        assert first_page.next_cursor is not None
+        second_page = await get_shop_report(
+            pool,
+            actor_id=MANAGER_ID,
+            business_id=BUSINESS_ID,
+            shop_id=SHOP_ID,
+            period_start=report_start,
+            period_end=report_end,
+            cursor=first_page.next_cursor,
+            limit=100,
+        )
+        assert all(row.barber_membership_id > first_page.next_cursor for row in second_page.barbers)
+        assert [*first_page.barbers, *second_page.barbers] == report.barbers
+
+        platform_report = await get_shop_report(
+            pool,
+            actor_id=PLATFORM_ID,
+            business_id=BUSINESS_ID,
+            shop_id=SHOP_ID,
+            period_start=report_start,
+            period_end=report_end,
+            cursor=None,
+            limit=100,
+        )
+        assert platform_report.totals == report.totals
+        with pytest.raises(ReportAccessDeniedError):
+            await get_shop_report(
+                pool,
+                actor_id=MANAGER_ID,
+                business_id=BUSINESS_ID,
+                shop_id=REPORT_SHOP_ID,
+                period_start=report_start,
+                period_end=report_end,
+                cursor=None,
+                limit=50,
+            )
+
+        overview = await get_business_overview(
+            pool,
+            actor_id=OWNER_ID,
+            business_id=BUSINESS_ID,
+            period_start=report_start,
+            period_end=report_end,
+            cursor=None,
+            limit=100,
+        )
+        assert len(overview.shops) == 2
+        assert overview.totals.net_grand == Decimal("65.00")
+        assert next(row for row in overview.shops if row.shop_id == SHOP_ID).net_grand == Decimal(
+            "65.00"
+        )
+        overview_page = await get_business_overview(
+            pool,
+            actor_id=PLATFORM_ID,
+            business_id=BUSINESS_ID,
+            period_start=report_start,
+            period_end=report_end,
+            cursor=None,
+            limit=1,
+        )
+        assert len(overview_page.shops) == 1
+        assert overview_page.next_cursor is not None
+        overview_tail = await get_business_overview(
+            pool,
+            actor_id=PLATFORM_ID,
+            business_id=BUSINESS_ID,
+            period_start=report_start,
+            period_end=report_end,
+            cursor=overview_page.next_cursor,
+            limit=100,
+        )
+        assert [*overview_page.shops, *overview_tail.shops] == overview.shops
+
+        for denied_actor in (RECEPTIONIST_ID, BARBER_ID, OTHER_OWNER_ID):
+            with pytest.raises(ReportAccessDeniedError):
+                await get_shop_report(
+                    pool,
+                    actor_id=denied_actor,
+                    business_id=BUSINESS_ID,
+                    shop_id=SHOP_ID,
+                    period_start=report_start,
+                    period_end=report_end,
+                    cursor=None,
+                    limit=50,
+                )
+        with pytest.raises(ReportAccessDeniedError):
+            await get_business_overview(
+                pool,
+                actor_id=MANAGER_ID,
+                business_id=BUSINESS_ID,
+                period_start=report_start,
+                period_end=report_end,
+                cursor=None,
+                limit=50,
+            )
+        with pytest.raises(ReportAccessDeniedError):
+            await get_business_overview(
+                pool,
+                actor_id=OTHER_OWNER_ID,
+                business_id=BUSINESS_ID,
+                period_start=report_start,
+                period_end=report_end,
+                cursor=None,
+                limit=50,
+            )
 
         async with pool.connection(timeout=5) as connection, connection.transaction():
             await connection.execute("set local role authenticated")

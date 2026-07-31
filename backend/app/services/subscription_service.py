@@ -68,6 +68,7 @@ class CashReceiptRequest(BaseModel):
 
 class CashReceiptResponse(BaseModel):
     receipt_id: UUID
+    e_invoice_document_id: UUID
     receipt_sequence: int
     subscription_id: UUID
     business_id: UUID
@@ -137,6 +138,37 @@ class BillingModeTransitionResponse(BaseModel):
     subscription_ids: list[UUID]
 
 
+async def _get_e_invoice_document(
+    connection: Any,
+    *,
+    receipt_id: UUID,
+) -> UUID:
+    cursor = await connection.execute(
+        """
+        select id
+        from public.e_invoice_documents
+        where subscription_cash_receipt_id = %s
+        """,
+        (receipt_id,),
+    )
+    document = await cursor.fetchone()
+    if document is None:
+        raise SubscriptionStateConflictError
+    return UUID(str(document[0]))
+
+
+async def _cash_receipt_replay(
+    connection: Any,
+    replay: dict[str, Any],
+) -> CashReceiptResponse:
+    receipt_id = UUID(str(replay["receipt_id"]))
+    document_id = await _get_e_invoice_document(
+        connection,
+        receipt_id=receipt_id,
+    )
+    return CashReceiptResponse.model_validate({**replay, "e_invoice_document_id": document_id})
+
+
 async def _sync_subject_status(
     connection: Any,
     *,
@@ -180,7 +212,7 @@ async def record_cash_receipt(
                 expected_status=201,
             )
             if replay is not None:
-                return CashReceiptResponse.model_validate(replay)
+                return await _cash_receipt_replay(connection, replay)
 
             cursor = await connection.execute(
                 """
@@ -252,8 +284,13 @@ async def record_cash_receipt(
                     status=next_status,
                 )
 
+            e_invoice_document_id = await _get_e_invoice_document(
+                connection,
+                receipt_id=UUID(str(receipt_id)),
+            )
             response = CashReceiptResponse(
                 receipt_id=UUID(str(receipt_id)),
+                e_invoice_document_id=e_invoice_document_id,
                 receipt_sequence=int(receipt_sequence),
                 subscription_id=payload.subscription_id,
                 business_id=UUID(str(business_id)),
@@ -312,7 +349,7 @@ async def reverse_cash_receipt(
             expected_status=201,
         )
         if replay is not None:
-            return CashReceiptResponse.model_validate(replay)
+            return await _cash_receipt_replay(connection, replay)
 
         cursor = await connection.execute(
             """
@@ -359,8 +396,13 @@ async def reverse_cash_receipt(
         except UniqueViolation as exc:
             raise SubscriptionStateConflictError from exc
         reversal_id, receipt_sequence = await cursor.fetchone()
+        e_invoice_document_id = await _get_e_invoice_document(
+            connection,
+            receipt_id=UUID(str(reversal_id)),
+        )
         response = CashReceiptResponse(
             receipt_id=UUID(str(reversal_id)),
+            e_invoice_document_id=e_invoice_document_id,
             receipt_sequence=int(receipt_sequence),
             subscription_id=UUID(str(original[1])),
             business_id=UUID(str(original[2])),

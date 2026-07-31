@@ -95,7 +95,7 @@ insert into public.shop_business_hours (
   1,
   '09:00',
   '23:00',
-  current_date
+  date '2026-07-01'
 );
 
 insert into public.shop_closures (
@@ -133,7 +133,7 @@ insert into public.staff_schedules (
   1,
   '09:00',
   '18:00',
-  current_date
+  date '2026-07-01'
 );
 
 insert into public.staff_schedule_breaks (
@@ -345,7 +345,7 @@ begin
       2,
       '09:00',
       '18:00',
-      current_date
+      date '2026-07-01'
     );
     raise exception 'non-barber schedule was accepted';
   exception when others then
@@ -397,7 +397,7 @@ begin
       '22:00',
       '02:00',
       false,
-      current_date
+      date '2026-07-01'
     );
     raise exception 'overnight shift without next-day flag was accepted';
   exception when check_violation then
@@ -418,7 +418,7 @@ begin
       1,
       '10:00',
       '20:00',
-      current_date + 1
+      date '2026-07-01'
     );
     raise exception 'overlapping business hours were accepted';
   exception when exclusion_violation then

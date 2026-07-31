@@ -137,16 +137,16 @@ insert into public.subscriptions (
     '10000000-0000-0000-0000-000000000001',
     'business',
     'active',
-    current_date,
-    current_date + 30
+    date '2026-07-01',
+    greatest(current_date + 30, date '2026-12-31')
   ),
   (
     '30000000-0000-0000-0000-000000000002',
     '10000000-0000-0000-0000-000000000002',
     'business',
     'active',
-    current_date,
-    current_date + 30
+    date '2026-07-01',
+    greatest(current_date + 30, date '2026-12-31')
   );
 
 do $$

@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import io
+import json
 import os
 import zipfile
 from uuid import UUID
@@ -92,10 +93,17 @@ async def test_export_is_private_checksummed_expiring_and_does_not_freeze() -> N
             manifest = archive.read("manifest.json").decode()
             bot_export = archive.read("bots.json").decode()
             shop_export = archive.read("shops.json").decode()
-        assert '"schema_version": "2026-07-26.v1"' in manifest
+            e_invoice_export = json.loads(archive.read("e_invoice_documents.json"))
+        assert '"schema_version": "2026-07-26.v2"' in manifest
         assert "token_ciphertext" not in bot_export
         assert "webhook_secret_hash" not in bot_export
         assert "public_queue_token_hash" not in shop_export
+        assert e_invoice_export["rows"]
+        assert all(
+            row["transaction_scope"] == "b2b" and row["status"] == "prepared"
+            for row in e_invoice_export["rows"]
+        )
+        assert all("provider_payload" not in row for row in e_invoice_export["rows"])
 
         async with pool.connection(timeout=5) as connection:
             cursor = await connection.execute(

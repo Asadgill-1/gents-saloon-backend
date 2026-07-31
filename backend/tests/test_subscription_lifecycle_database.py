@@ -83,6 +83,24 @@ async def test_receipt_suspend_resume_reversal_and_mode_transition() -> None:
             ),
         )
         assert receipt == replay
+        assert receipt.e_invoice_document_id == replay.e_invoice_document_id
+        async with pool.connection(timeout=5) as connection, connection.transaction():
+            await connection.execute(
+                """
+                update public.idempotency_keys
+                set response_body = response_body - 'e_invoice_document_id'
+                where scope = 'platform.subscription.cash_receipt'
+                  and key = 'cash-receipt-concurrent-0001'
+                """
+            )
+        legacy_replay = await record_cash_receipt(
+            pool,
+            actor_id=ADMIN_ID,
+            idempotency_key="cash-receipt-concurrent-0001",
+            request_id="cash-legacy-replay",
+            payload=receipt_payload,
+        )
+        assert legacy_replay == receipt
         assert (
             await _fetchone(
                 pool,
@@ -117,6 +135,59 @@ async def test_receipt_suspend_resume_reversal_and_mode_transition() -> None:
         )
         assert reversal == replayed_reversal
         assert reversal.reversed_receipt_id == receipt.receipt_id
+        assert reversal.e_invoice_document_id != receipt.e_invoice_document_id
+        documents = await _fetchone(
+            pool,
+            """
+            select
+              count(*),
+              count(*) filter (where document_type = 'invoice'),
+              count(*) filter (where document_type = 'credit_note'),
+              count(*) filter (
+                where transaction_scope = 'b2b'
+                  and status = 'prepared'
+                  and source_schema_version = 'platform_billing_source_v1'
+                  and source_snapshot -> 'buyer' ->> 'business_id' = %s
+              ),
+              count(distinct subscription_cash_receipt_id),
+              count(*) filter (
+                where reversal_of_document_id = %s
+              )
+            from public.e_invoice_documents
+            where id in (%s, %s)
+            """,
+            (
+                str(BUSINESS_A_ID),
+                receipt.e_invoice_document_id,
+                receipt.e_invoice_document_id,
+                reversal.e_invoice_document_id,
+            ),
+        )
+        assert documents == (2, 1, 1, 2, 2, 1)
+        events = await _fetchone(
+            pool,
+            """
+            select
+              count(*) filter (where topic = 'e_invoice.document_prepared'),
+              count(*) filter (where action = 'e_invoice.document_prepared')
+            from (
+              select topic, null::text as action
+              from public.outbox_events
+              where payload ->> 'document_id' in (%s, %s)
+              union all
+              select null::text, action
+              from public.audit_log
+              where entity_id in (%s, %s)
+            ) evidence
+            """,
+            (
+                str(receipt.e_invoice_document_id),
+                str(reversal.e_invoice_document_id),
+                receipt.e_invoice_document_id,
+                reversal.e_invoice_document_id,
+            ),
+        )
+        assert events == (2, 2)
 
         async with pool.connection(timeout=5) as connection:
             with pytest.raises(RaiseException, match="append-only"):

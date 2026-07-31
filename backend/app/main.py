@@ -19,6 +19,7 @@ from app.api.platform.exports import router as platform_exports_router
 from app.api.platform.subscriptions import router as platform_subscriptions_router
 from app.api.platform.tenants import router as platform_tenants_router
 from app.api.public import router as public_router
+from app.api.reports import router as reports_router
 from app.api.tenant import router as tenant_router
 from app.core.auth import JwtVerifier
 from app.core.config import Settings, get_settings
@@ -85,6 +86,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(checkout_router)
     app.include_router(corrections_router)
     app.include_router(payouts_router)
+    app.include_router(reports_router)
     app.include_router(legal_cash_router)
     app.include_router(platform_tenants_router)
     app.include_router(platform_subscriptions_router)
