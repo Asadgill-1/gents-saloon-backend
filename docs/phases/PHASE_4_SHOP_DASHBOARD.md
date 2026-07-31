@@ -2,7 +2,7 @@
 
 ## Status — 2026-07-31
 
-**Incomplete; visual prototype only.** The current components preserve the intended styling, but operational records are hardcoded and mutations are client-only. Phase 4 remains open until Supabase SSR authentication, backend reads/actions, Realtime refresh, role gates, Playwright, accessibility, and its dated security audit pass. See [../../START_HERE.md](../../START_HERE.md).
+**Incomplete; operational recovery is in progress.** The recovery branch now has real Supabase email/password sign-in, server-verified actor/shop context, FastAPI-backed queue/cash/checkout/report views, authenticated idempotent server actions, read-only Realtime refresh, and nonce-based script CSP. Phase 4 remains open until appointment/reschedule details, checkout preview and receipt printing, business-wide owner reporting, remaining money/team flows, Playwright/accessibility gates, live staging proof, and its dated security audit pass. See [../../START_HERE.md](../../START_HERE.md).
 
 ## Outcome
 
