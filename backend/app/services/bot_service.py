@@ -24,6 +24,7 @@ from app.services.reception_bot_flow import (
 )
 from app.services.reception_cash_flow import (
     ReceptionCashExpiredError,
+    handle_reception_advance_handoff,
     handle_reception_cash_callback,
     handle_reception_cash_input,
     handle_reception_eod_callback,
@@ -558,6 +559,21 @@ async def process_claimed_update(
         )
         response_text = eod_response.text
         menu = eod_response.keyboard
+    elif callback == "v1.r06" and claimed.scope.role == "receptionist":
+        assert claimed.scope.business_id is not None
+        assert claimed.scope.shop_id is not None
+        assert actor.actor_id is not None
+        handoff_response = await handle_reception_advance_handoff(
+            pool,
+            bot_id=claimed.scope.bot_id,
+            business_id=claimed.scope.business_id,
+            shop_id=claimed.scope.shop_id,
+            actor_id=actor.actor_id,
+            telegram_user_id=telegram_user_id,
+            request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
+        )
+        response_text = handoff_response.text
+        menu = _keyboard_for("receptionist")
     elif (
         callback is not None
         and claimed.scope.role == "receptionist"

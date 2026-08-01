@@ -503,10 +503,105 @@ async def handle_reception_eod_callback(
     )
 
 
+async def handle_reception_advance_handoff(
+    pool: Any,
+    *,
+    bot_id: UUID,
+    business_id: UUID,
+    shop_id: UUID,
+    actor_id: UUID,
+    telegram_user_id: int,
+    request_id: str,
+) -> ReceptionCashResponse:
+    async with pool.connection(timeout=5) as connection, connection.transaction():
+        await require_receptionist(
+            connection,
+            actor_id=actor_id,
+            business_id=business_id,
+            shop_id=shop_id,
+            telegram_user_id=telegram_user_id,
+        )
+        cursor = await connection.execute(
+            """
+            select bot.id, bo.telegram_user_id
+            from public.bots bot
+            join public.business_owners bo
+              on bo.business_id = bot.business_id
+             and bo.active and bo.is_primary and bo.telegram_user_id is not null
+            where bot.business_id = %s and bot.shop_id = %s
+              and bot.role = 'owner' and bot.active
+            order by bot.id
+            limit 1
+            """,
+            (business_id, shop_id),
+        )
+        owner = await cursor.fetchone()
+        if owner is None:
+            return ReceptionCashResponse(
+                text=(
+                    "Advance grants require an owner. No active owner bot is registered; "
+                    "ask the owner to use the secure dashboard."
+                )
+            )
+        dedupe = f"telegram:advance-handoff:{bot_id}:{request_id}"
+        cursor = await connection.execute(
+            """
+            insert into public.outbox_events (
+              business_id, shop_id, topic, dedupe_key, payload
+            ) values (%s, %s, 'telegram.send_message', %s, %s)
+            on conflict (dedupe_key) do nothing
+            returning id
+            """,
+            (
+                business_id,
+                shop_id,
+                dedupe,
+                Jsonb(
+                    {
+                        "kind": "message",
+                        "bot_id": str(owner[0]),
+                        "chat_id": int(owner[1]),
+                        "text": (
+                            "Reception requested an advance review for this shop. "
+                            "Use the owner bot or secure dashboard to select the barber, "
+                            "amount, payout policy, and cash shift."
+                        ),
+                        "keyboard": None,
+                    }
+                ),
+            ),
+        )
+        if await cursor.fetchone() is not None:
+            await connection.execute(
+                """
+                insert into public.audit_log (
+                  business_id, shop_id, actor_type, actor_id, action,
+                  entity_type, entity_id, request_id, after
+                ) values (%s, %s, 'auth_user', %s,
+                          'telegram.advance_handoff_requested', 'shop', %s, %s, %s)
+                """,
+                (
+                    business_id,
+                    shop_id,
+                    actor_id,
+                    shop_id,
+                    request_id,
+                    Jsonb({"owner_bot_id": str(owner[0])}),
+                ),
+            )
+    return ReceptionCashResponse(
+        text=(
+            "Advance request sent to the owner. Only an owner or platform administrator "
+            "can approve and disburse it."
+        )
+    )
+
+
 __all__ = [
     "ReceptionCashExpiredError",
     "ReceptionCashResponse",
     "handle_reception_cash_callback",
+    "handle_reception_advance_handoff",
     "handle_reception_eod_callback",
     "handle_reception_cash_input",
 ]

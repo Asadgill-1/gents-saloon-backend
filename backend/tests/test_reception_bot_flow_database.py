@@ -8,6 +8,7 @@ from app.core.database import create_database_pool
 from app.services.booking_service import BookingTransitionRequest, transition_booking
 from app.services.reception_bot_flow import handle_reception_callback
 from app.services.reception_cash_flow import (
+    handle_reception_advance_handoff,
     handle_reception_cash_callback,
     handle_reception_cash_input,
     handle_reception_eod_callback,
@@ -23,10 +24,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 BOT_ID = UUID("60000000-0000-0000-0000-000000000003")
+OWNER_BOT_ID = UUID("60000000-0000-0000-0000-000000000004")
 BUSINESS_ID = UUID("10000000-0000-0000-0000-000000000001")
 SHOP_ID = UUID("20000000-0000-0000-0000-000000000001")
 ACTOR_ID = UUID("00000000-0000-0000-0000-000000000003")
 TELEGRAM_USER_ID = 999101
+OWNER_TELEGRAM_USER_ID = 999102
 
 
 async def _authorize_reception_bot(pool: object) -> None:
@@ -306,6 +309,57 @@ async def test_reception_cash_flow_is_replay_safe_and_renders_eod() -> None:
         )
         assert "EOD report" in report.text
         assert "Closed-shift variance: AED" in report.text
+
+        async with pool.connection(timeout=5) as connection, connection.transaction():
+            await connection.execute(
+                """
+                update public.business_owners
+                set telegram_user_id = %s
+                where business_id = %s and active and is_primary
+                """,
+                (OWNER_TELEGRAM_USER_ID, BUSINESS_ID),
+            )
+            await connection.execute(
+                """
+                insert into public.bots (
+                  id, business_id, shop_id, role, token_ciphertext,
+                  bot_username, webhook_secret_hash
+                ) values (
+                  %s, %s, %s, 'owner',
+                  'v1.AAAAAAAAAAAAAAAA.RRRRRRRRRRRRRRRRRRRRRR',
+                  'test_owner_bot', 'v1:' || repeat('d', 64)
+                )
+                on conflict (id) do nothing
+                """,
+                (OWNER_BOT_ID, BUSINESS_ID, SHOP_ID),
+            )
+        for _attempt in range(2):
+            handoff = await handle_reception_advance_handoff(
+                pool,
+                bot_id=BOT_ID,
+                business_id=BUSINESS_ID,
+                shop_id=SHOP_ID,
+                actor_id=ACTOR_ID,
+                telegram_user_id=TELEGRAM_USER_ID,
+                request_id="telegram:test:advance-handoff",
+            )
+            assert "Only an owner or platform administrator" in handoff.text
+        async with pool.connection(timeout=5) as connection:
+            cursor = await connection.execute(
+                """
+                select
+                  (select count(*) from public.outbox_events
+                   where dedupe_key = %s),
+                  (select count(*) from public.audit_log
+                   where action = 'telegram.advance_handoff_requested'
+                     and request_id = %s)
+                """,
+                (
+                    f"telegram:advance-handoff:{BOT_ID}:telegram:test:advance-handoff",
+                    "telegram:test:advance-handoff",
+                ),
+            )
+            assert await cursor.fetchone() == (1, 1)
     finally:
         await pool.close()
 
