@@ -28,6 +28,11 @@ from app.services.reception_cash_flow import (
     handle_reception_cash_input,
     handle_reception_eod_callback,
 )
+from app.services.reception_sales_flow import (
+    ReceptionSalesExpiredError,
+    handle_reception_sales_callback,
+    handle_reception_sales_input,
+)
 
 UPDATE_FLOOD_SCRIPT = """
 local current = redis.call('INCR', KEYS[1])
@@ -553,6 +558,29 @@ async def process_claimed_update(
         )
         response_text = eod_response.text
         menu = eod_response.keyboard
+    elif (
+        callback is not None
+        and claimed.scope.role == "receptionist"
+        and (callback in {"v1.r03", "v1.r04"} or callback.startswith("v1.sales"))
+    ):
+        assert claimed.scope.business_id is not None
+        assert claimed.scope.shop_id is not None
+        assert actor.actor_id is not None
+        try:
+            sales_response = await handle_reception_sales_callback(
+                pool,
+                bot_id=claimed.scope.bot_id,
+                business_id=claimed.scope.business_id,
+                shop_id=claimed.scope.shop_id,
+                actor_id=actor.actor_id,
+                telegram_user_id=telegram_user_id,
+                callback=callback,
+                request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
+            )
+            response_text = sales_response.text
+            menu = sales_response.keyboard or _keyboard_for("receptionist")
+        except ReceptionSalesExpiredError:
+            response_text = TRANSLATIONS[language]["expired"]
     elif callback is not None:
         allowed = {callback_data(code) for row in ROLE_MENUS[claimed.scope.role] for _, code in row}
         response_text = (
@@ -568,7 +596,7 @@ async def process_claimed_update(
         assert claimed.scope.shop_id is not None
         assert actor.actor_id is not None
         try:
-            cash_response = await handle_reception_cash_input(
+            sales_response = await handle_reception_sales_input(
                 pool,
                 bot_id=claimed.scope.bot_id,
                 business_id=claimed.scope.business_id,
@@ -578,10 +606,24 @@ async def process_claimed_update(
                 text=message_text,
                 request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
             )
-            response_text = cash_response.text
-            menu = cash_response.keyboard or _keyboard_for("receptionist")
-        except ReceptionCashExpiredError:
-            response_text = TRANSLATIONS[language]["expired"]
+            response_text = sales_response.text
+            menu = sales_response.keyboard or _keyboard_for("receptionist")
+        except ReceptionSalesExpiredError:
+            try:
+                cash_response = await handle_reception_cash_input(
+                    pool,
+                    bot_id=claimed.scope.bot_id,
+                    business_id=claimed.scope.business_id,
+                    shop_id=claimed.scope.shop_id,
+                    actor_id=actor.actor_id,
+                    telegram_user_id=telegram_user_id,
+                    text=message_text,
+                    request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
+                )
+                response_text = cash_response.text
+                menu = cash_response.keyboard or _keyboard_for("receptionist")
+            except ReceptionCashExpiredError:
+                response_text = TRANSLATIONS[language]["expired"]
     elif claimed.scope.role != "customer":
         response_text = TRANSLATIONS[language]["welcome"]
     else:
