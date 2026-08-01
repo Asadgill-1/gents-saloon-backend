@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 from app.core.entitlements import resolve_entitlement
 from app.core.telegram import callback_data, decrypt_envelope, update_associated_data
 from app.services.ai_service import handle_ai_customer_chat
+from app.services.barber_bot_flow import BarberMenuExpiredError, handle_barber_callback
 from app.services.customer_bot_flow import MESSAGES as CUSTOMER_MESSAGES
 from app.services.customer_bot_flow import (
     CustomerMenuExpiredError,
@@ -596,6 +597,31 @@ async def process_claimed_update(
             response_text = sales_response.text
             menu = sales_response.keyboard or _keyboard_for("receptionist")
         except ReceptionSalesExpiredError:
+            response_text = TRANSLATIONS[language]["expired"]
+    elif (
+        callback is not None
+        and claimed.scope.role == "barber_crew"
+        and (
+            callback in {"v1.b01", "v1.b02", "v1.b03", "v1.b04"} or callback.startswith("v1.barrem")
+        )
+    ):
+        assert claimed.scope.business_id is not None
+        assert claimed.scope.shop_id is not None
+        assert actor.actor_id is not None
+        try:
+            barber_response = await handle_barber_callback(
+                pool,
+                bot_id=claimed.scope.bot_id,
+                business_id=claimed.scope.business_id,
+                shop_id=claimed.scope.shop_id,
+                actor_id=actor.actor_id,
+                telegram_user_id=telegram_user_id,
+                callback=callback,
+                request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
+            )
+            response_text = barber_response.text
+            menu = barber_response.keyboard or _keyboard_for("barber_crew")
+        except BarberMenuExpiredError:
             response_text = TRANSLATIONS[language]["expired"]
     elif callback is not None:
         allowed = {callback_data(code) for row in ROLE_MENUS[claimed.scope.role] for _, code in row}

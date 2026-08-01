@@ -166,7 +166,8 @@ try {
             tests/test_correction_database.py `
             tests/test_payout_database.py `
             tests/test_customer_bot_flow_database.py `
-            tests/test_reception_bot_flow_database.py
+            tests/test_reception_bot_flow_database.py `
+            tests/test_barber_bot_flow_database.py
         if ($LASTEXITCODE -ne 0) {
             throw "Application database integration tests failed."
         }
