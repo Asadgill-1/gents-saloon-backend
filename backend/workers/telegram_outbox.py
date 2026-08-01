@@ -10,7 +10,6 @@ from aiogram.exceptions import (
     TelegramRetryAfter,
     TelegramUnauthorizedError,
 )
-from aiogram.types import InlineKeyboardMarkup
 from celery import shared_task
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +19,7 @@ from app.core.database import create_database_pool
 from app.core.redis import create_redis_client
 from app.core.telegram import (
     AiogramTelegramTransport,
+    TelegramReplyMarkup,
     decode_base64_key,
     decrypt_bot_token,
     decrypt_envelope,
@@ -49,7 +49,7 @@ class TelegramOutboundPayload(BaseModel):
     bot_id: UUID
     chat_id: int = Field(gt=0)
     text: str = Field(min_length=1, max_length=4096)
-    keyboard: InlineKeyboardMarkup | None = None
+    keyboard: TelegramReplyMarkup | None = None
 
 
 class TelegramRegistrationPayload(BaseModel):

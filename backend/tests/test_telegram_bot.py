@@ -2,6 +2,7 @@ import base64
 from uuid import UUID
 
 import pytest
+from aiogram.types import ReplyKeyboardMarkup, Update
 
 from app.core.telegram import (
     TelegramSecurityError,
@@ -12,7 +13,7 @@ from app.core.telegram import (
     encrypt_bot_token,
     verify_telegram_webhook_secret,
 )
-from app.services.bot_service import ROLE_MENUS, TRANSLATIONS
+from app.services.bot_service import ROLE_MENUS, TRANSLATIONS, extract_incoming_update
 from app.services.customer_bot_flow import (
     BUTTONS,
     MENU_LABELS,
@@ -103,3 +104,58 @@ def test_role_menus_and_customer_locales_are_complete() -> None:
             for button in row
         )
     assert len(language_menu().inline_keyboard) == 2
+
+
+def _contact_update(*, contact_user_id: int, phone: str) -> Update:
+    return Update.model_validate(
+        {
+            "update_id": 41,
+            "message": {
+                "message_id": 7,
+                "date": 0,
+                "chat": {"id": 9001, "type": "private"},
+                "from": {
+                    "id": 9001,
+                    "is_bot": False,
+                    "first_name": "  Test\u0000",
+                    "last_name": "Customer  ",
+                },
+                "contact": {
+                    "phone_number": phone,
+                    "first_name": "Test",
+                    "user_id": contact_user_id,
+                },
+            },
+        }
+    )
+
+
+def test_customer_contact_capture_accepts_only_the_senders_contact() -> None:
+    own = extract_incoming_update(_contact_update(contact_user_id=9001, phone="971 (50) 123-4567"))
+    foreign = extract_incoming_update(_contact_update(contact_user_id=9002, phone="+971501234568"))
+
+    assert own.profile_name == "Test Customer"
+    assert own.contact_phone == "+971501234567"
+    assert foreign.contact_phone is None
+
+
+def test_outbound_contact_keyboard_schema_is_supported() -> None:
+    from workers.telegram_outbox import TelegramOutboundPayload
+
+    payload = TelegramOutboundPayload.model_validate(
+        {
+            "version": 1,
+            "kind": "message",
+            "bot_id": str(BOT_ID),
+            "chat_id": 9001,
+            "text": "Share contact",
+            "keyboard": {
+                "keyboard": [[{"text": "Share", "request_contact": True}]],
+                "resize_keyboard": True,
+                "one_time_keyboard": True,
+            },
+        }
+    )
+
+    assert isinstance(payload.keyboard, ReplyKeyboardMarkup)
+    assert payload.keyboard.keyboard[0][0].request_contact is True

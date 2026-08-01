@@ -10,12 +10,13 @@ from uuid import UUID
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 ENVELOPE_VERSION = 1
 NONCE_BYTES = 12
 CALLBACK_PATTERN = re.compile(r"^v1\.[a-z0-9_]{1,48}$")
+TelegramReplyMarkup = InlineKeyboardMarkup | ReplyKeyboardMarkup
 
 
 class TelegramSecurityError(ValueError):
@@ -28,7 +29,7 @@ class TelegramTransport(Protocol):
         chat_id: int,
         text: str,
         *,
-        reply_markup: InlineKeyboardMarkup | None = None,
+        reply_markup: TelegramReplyMarkup | None = None,
     ) -> int: ...
 
     async def answer_callback_query(
@@ -198,7 +199,7 @@ class AiogramTelegramTransport:
         chat_id: int,
         text: str,
         *,
-        reply_markup: InlineKeyboardMarkup | None = None,
+        reply_markup: TelegramReplyMarkup | None = None,
     ) -> int:
         message = await self._bot.send_message(
             chat_id=chat_id,
@@ -247,6 +248,7 @@ def safe_telegram_error_code(exc: BaseException) -> str:
 __all__ = [
     "AiogramTelegramTransport",
     "TelegramSecurityError",
+    "TelegramReplyMarkup",
     "TelegramTransport",
     "bot_token_associated_data",
     "callback_data",

@@ -1,15 +1,28 @@
 import hashlib
 import json
+import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from psycopg.types.json import Jsonb
 
 from app.core.entitlements import resolve_entitlement
-from app.core.telegram import callback_data, decrypt_envelope, update_associated_data
+from app.core.telegram import (
+    TelegramReplyMarkup,
+    callback_data,
+    decrypt_envelope,
+    update_associated_data,
+)
 from app.services.ai_service import handle_ai_customer_chat
 from app.services.barber_bot_flow import BarberMenuExpiredError, handle_barber_callback
 from app.services.customer_bot_flow import MESSAGES as CUSTOMER_MESSAGES
@@ -73,6 +86,32 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "expired": "اس مینو کی میعاد ختم ہو گئی۔ دوبارہ شروع کریں۔",
     },
 }
+
+CONTACT_PROMPTS: dict[str, tuple[str, str, str]] = {
+    "en": (
+        "Please share your own phone number to continue.",
+        "Share phone number",
+        "Phone number saved. Choose an option:",
+    ),
+    "ar": (
+        "يرجى مشاركة رقم هاتفك للمتابعة.",
+        "مشاركة رقم الهاتف",
+        "تم حفظ رقم الهاتف. اختر خدمة:",
+    ),
+    "hi": (
+        "जारी रखने के लिए अपना फ़ोन नंबर साझा करें।",
+        "फ़ोन नंबर साझा करें",
+        "फ़ोन नंबर सहेजा गया। एक विकल्प चुनें:",
+    ),
+    "ur": (
+        "جاری رکھنے کے لیے اپنا فون نمبر شیئر کریں۔",
+        "فون نمبر شیئر کریں",
+        "فون نمبر محفوظ ہو گیا۔ ایک آپشن منتخب کریں:",
+    ),
+}
+
+PHONE_PATTERN = re.compile(r"^\+[1-9][0-9]{7,14}$")
+LANGUAGE_CALLBACKS = {"v1.len", "v1.lar", "v1.lhi", "v1.lur"}
 
 ROLE_MENUS: dict[str, tuple[tuple[tuple[str, str], ...], ...]] = {
     "customer": (
@@ -139,6 +178,17 @@ class TelegramActor:
     actor_id: UUID | None
     customer_id: UUID | None
     language: str
+    needs_contact: bool = False
+
+
+@dataclass(frozen=True)
+class IncomingTelegramUpdate:
+    telegram_user_id: int
+    chat_id: int
+    chat_type: str
+    message_text: str | None
+    profile_name: str | None
+    contact_phone: str | None
 
 
 @dataclass(frozen=True)
@@ -163,20 +213,56 @@ def _keyboard_for(role: str) -> InlineKeyboardMarkup:
     )
 
 
-def _user_and_chat(update: Update) -> tuple[int, int, str, str | None]:
+def _contact_keyboard(language: str) -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=CONTACT_PROMPTS[language][1], request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        input_field_placeholder=CONTACT_PROMPTS[language][1],
+    )
+
+
+def _safe_profile_name(user: Any) -> str | None:
+    raw = " ".join(part for part in (user.first_name, user.last_name) if part)
+    visible = "".join(char for char in raw if not unicodedata.category(char).startswith("C"))
+    value = " ".join(visible.split())[:120]
+    return value or None
+
+
+def _self_contact_phone(message: Any, *, telegram_user_id: int) -> str | None:
+    contact = message.contact
+    if contact is None or contact.user_id != telegram_user_id:
+        return None
+    value = re.sub(r"[\s()\-]", "", contact.phone_number)
+    if not value.startswith("+"):
+        value = "+" + value
+    return value if PHONE_PATTERN.fullmatch(value) is not None else None
+
+
+def extract_incoming_update(update: Update) -> IncomingTelegramUpdate:
     if update.message is not None and update.message.from_user is not None:
-        return (
-            update.message.from_user.id,
-            update.message.chat.id,
-            str(update.message.chat.type),
-            update.message.text,
+        sender = update.message.from_user
+        return IncomingTelegramUpdate(
+            telegram_user_id=sender.id,
+            chat_id=update.message.chat.id,
+            chat_type=str(update.message.chat.type),
+            message_text=update.message.text,
+            profile_name=_safe_profile_name(sender),
+            contact_phone=_self_contact_phone(update.message, telegram_user_id=sender.id),
         )
     if update.callback_query is not None:
         sender = update.callback_query.from_user
         message = update.callback_query.message
         if message is None:
             raise TelegramAuthorizationError
-        return sender.id, message.chat.id, str(message.chat.type), None
+        return IncomingTelegramUpdate(
+            telegram_user_id=sender.id,
+            chat_id=message.chat.id,
+            chat_type=str(message.chat.type),
+            message_text=None,
+            profile_name=_safe_profile_name(sender),
+            contact_phone=None,
+        )
     raise TelegramAuthorizationError
 
 
@@ -261,6 +347,8 @@ async def _authorize_actor(
     *,
     scope: BotScope,
     telegram_user_id: int,
+    profile_name: str | None = None,
+    contact_phone: str | None = None,
 ) -> TelegramActor:
     blocked = await connection.execute(
         """
@@ -335,7 +423,7 @@ async def _authorize_actor(
         raise TelegramAuthorizationError
     cursor = await connection.execute(
         """
-        select id, language::text, blocked_at
+        select id, language::text, blocked_at, display_name, phone_e164
         from public.customers
         where business_id = %s and shop_id = %s
           and telegram_user_id = %s and anonymized_at is null
@@ -347,16 +435,58 @@ async def _authorize_actor(
     if row is None:
         cursor = await connection.execute(
             """
-            insert into public.customers (business_id, shop_id, telegram_user_id)
-            values (%s, %s, %s)
-            returning id, language::text, blocked_at
+            insert into public.customers (
+              business_id, shop_id, telegram_user_id, display_name, phone_e164
+            )
+            values (%s, %s, %s, %s, %s)
+            returning id, language::text, blocked_at, display_name, phone_e164
             """,
-            (scope.business_id, scope.shop_id, telegram_user_id),
+            (
+                scope.business_id,
+                scope.shop_id,
+                telegram_user_id,
+                profile_name,
+                contact_phone,
+            ),
         )
         row = await cursor.fetchone()
     if row is None or row[2] is not None:
         raise TelegramAuthorizationError
-    return TelegramActor(telegram_user_id, None, UUID(str(row[0])), str(row[1]))
+    if (row[3] is None and profile_name is not None) or (
+        row[4] is None and contact_phone is not None
+    ):
+        cursor = await connection.execute(
+            """
+            update public.customers
+            set display_name = coalesce(display_name, %s),
+                phone_e164 = coalesce(phone_e164, %s),
+                updated_at = now()
+            where id = %s and business_id = %s and shop_id = %s
+              and telegram_user_id = %s and blocked_at is null and anonymized_at is null
+            returning display_name, phone_e164
+            """,
+            (
+                profile_name,
+                contact_phone,
+                row[0],
+                scope.business_id,
+                scope.shop_id,
+                telegram_user_id,
+            ),
+        )
+        profile = await cursor.fetchone()
+        if profile is None:
+            raise TelegramAuthorizationError
+        phone_e164 = profile[1]
+    else:
+        phone_e164 = row[4]
+    return TelegramActor(
+        telegram_user_id,
+        None,
+        UUID(str(row[0])),
+        str(row[1]),
+        needs_contact=phone_e164 is None,
+    )
 
 
 async def _enforce_flood_limit(
@@ -376,7 +506,7 @@ async def _enforce_flood_limit(
 
 
 def _outbound_payload(
-    *, bot_id: UUID, chat_id: int, text: str, keyboard: InlineKeyboardMarkup | None
+    *, bot_id: UUID, chat_id: int, text: str, keyboard: TelegramReplyMarkup | None
 ) -> dict[str, Any]:
     return {
         "version": 1,
@@ -395,7 +525,7 @@ async def _queue_message(
     update_id: int,
     chat_id: int,
     text: str,
-    keyboard: InlineKeyboardMarkup | None = None,
+    keyboard: TelegramReplyMarkup | None = None,
 ) -> None:
     await connection.execute(
         """
@@ -440,8 +570,11 @@ async def process_claimed_update(
         ),
     )
     update = Update.model_validate_json(payload)
-    telegram_user_id, chat_id, chat_type, message_text = _user_and_chat(update)
-    if chat_type != "private" or chat_id != telegram_user_id:
+    incoming = extract_incoming_update(update)
+    telegram_user_id = incoming.telegram_user_id
+    chat_id = incoming.chat_id
+    message_text = incoming.message_text
+    if incoming.chat_type != "private" or chat_id != telegram_user_id:
         raise TelegramAuthorizationError
 
     async with pool.connection(timeout=5) as connection, connection.transaction():
@@ -450,6 +583,8 @@ async def process_claimed_update(
             connection,
             scope=claimed.scope,
             telegram_user_id=telegram_user_id,
+            profile_name=incoming.profile_name,
+            contact_phone=incoming.contact_phone,
         )
 
     await _enforce_flood_limit(
@@ -487,30 +622,38 @@ async def process_claimed_update(
 
     callback = update.callback_query.data if update.callback_query is not None else None
     language = actor.language if claimed.scope.role == "customer" else "en"
-    menu: InlineKeyboardMarkup | None = (
+    menu: TelegramReplyMarkup | None = (
         customer_menu(language)
         if claimed.scope.role == "customer"
         else _keyboard_for(claimed.scope.role)
     )
     if callback is not None and claimed.scope.role == "customer":
-        assert claimed.scope.business_id is not None
-        assert claimed.scope.shop_id is not None
-        assert actor.customer_id is not None
-        try:
-            flow_response = await handle_customer_callback(
-                pool,
-                bot_id=claimed.scope.bot_id,
-                business_id=claimed.scope.business_id,
-                shop_id=claimed.scope.shop_id,
-                customer_id=actor.customer_id,
-                telegram_user_id=telegram_user_id,
-                callback=callback,
-                request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
-            )
-            response_text = flow_response.text
-            menu = flow_response.keyboard
-        except CustomerMenuExpiredError:
-            response_text = CUSTOMER_MESSAGES[language]["expired"]
+        if actor.needs_contact and callback not in LANGUAGE_CALLBACKS:
+            response_text = CONTACT_PROMPTS[language][0]
+            menu = _contact_keyboard(language)
+        else:
+            assert claimed.scope.business_id is not None
+            assert claimed.scope.shop_id is not None
+            assert actor.customer_id is not None
+            try:
+                flow_response = await handle_customer_callback(
+                    pool,
+                    bot_id=claimed.scope.bot_id,
+                    business_id=claimed.scope.business_id,
+                    shop_id=claimed.scope.shop_id,
+                    customer_id=actor.customer_id,
+                    telegram_user_id=telegram_user_id,
+                    callback=callback,
+                    request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
+                )
+                response_text = flow_response.text
+                menu = flow_response.keyboard
+                language = flow_response.language
+                if actor.needs_contact:
+                    response_text = CONTACT_PROMPTS[language][0]
+                    menu = _contact_keyboard(language)
+            except CustomerMenuExpiredError:
+                response_text = CUSTOMER_MESSAGES[language]["expired"]
     elif (
         callback is not None
         and claimed.scope.role == "receptionist"
@@ -671,6 +814,12 @@ async def process_claimed_update(
             if callback in allowed
             else TRANSLATIONS[language]["expired"]
         )
+    elif claimed.scope.role == "customer" and incoming.contact_phone is not None:
+        response_text = CONTACT_PROMPTS[language][2]
+        menu = customer_menu(language)
+    elif claimed.scope.role == "customer" and actor.needs_contact and message_text != "/start":
+        response_text = CONTACT_PROMPTS[language][0]
+        menu = _contact_keyboard(language)
     elif message_text == "/start" and claimed.scope.role == "customer":
         response_text = CUSTOMER_MESSAGES[language]["choose_language"]
         menu = language_menu()
@@ -812,6 +961,7 @@ def serialize_update(update: Update) -> bytes:
 __all__ = [
     "BotScope",
     "ClaimedUpdate",
+    "IncomingTelegramUpdate",
     "ROLE_MENUS",
     "TRANSLATIONS",
     "TelegramAuthorizationError",
@@ -819,6 +969,7 @@ __all__ = [
     "TelegramRateLimitUnavailableError",
     "TelegramUpdateError",
     "claim_next_update",
+    "extract_incoming_update",
     "fail_claimed_update",
     "process_claimed_update",
     "purge_telegram_retention",

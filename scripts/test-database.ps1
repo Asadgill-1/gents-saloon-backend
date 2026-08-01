@@ -165,6 +165,7 @@ try {
             tests/test_checkout_database.py `
             tests/test_correction_database.py `
             tests/test_payout_database.py `
+            tests/test_customer_contact_database.py `
             tests/test_customer_bot_flow_database.py `
             tests/test_reception_bot_flow_database.py `
             tests/test_barber_bot_flow_database.py `
