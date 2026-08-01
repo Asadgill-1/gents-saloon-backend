@@ -22,6 +22,12 @@ from app.services.reception_bot_flow import (
     ReceptionMenuExpiredError,
     handle_reception_callback,
 )
+from app.services.reception_cash_flow import (
+    ReceptionCashExpiredError,
+    handle_reception_cash_callback,
+    handle_reception_cash_input,
+    handle_reception_eod_callback,
+)
 
 UPDATE_FLOOD_SCRIPT = """
 local current = redis.call('INCR', KEYS[1])
@@ -512,6 +518,41 @@ async def process_claimed_update(
             menu = reception_response.keyboard or _keyboard_for("receptionist")
         except ReceptionMenuExpiredError:
             response_text = TRANSLATIONS[language]["expired"]
+    elif (
+        callback is not None
+        and claimed.scope.role == "receptionist"
+        and (callback == "v1.r05" or callback.startswith("v1.cash"))
+    ):
+        assert claimed.scope.business_id is not None
+        assert claimed.scope.shop_id is not None
+        assert actor.actor_id is not None
+        try:
+            cash_response = await handle_reception_cash_callback(
+                pool,
+                bot_id=claimed.scope.bot_id,
+                business_id=claimed.scope.business_id,
+                shop_id=claimed.scope.shop_id,
+                actor_id=actor.actor_id,
+                telegram_user_id=telegram_user_id,
+                callback=callback,
+            )
+            response_text = cash_response.text
+            menu = cash_response.keyboard or _keyboard_for("receptionist")
+        except ReceptionCashExpiredError:
+            response_text = TRANSLATIONS[language]["expired"]
+    elif callback == "v1.r07" and claimed.scope.role == "receptionist":
+        assert claimed.scope.business_id is not None
+        assert claimed.scope.shop_id is not None
+        assert actor.actor_id is not None
+        eod_response = await handle_reception_eod_callback(
+            pool,
+            business_id=claimed.scope.business_id,
+            shop_id=claimed.scope.shop_id,
+            actor_id=actor.actor_id,
+            telegram_user_id=telegram_user_id,
+        )
+        response_text = eod_response.text
+        menu = eod_response.keyboard
     elif callback is not None:
         allowed = {callback_data(code) for row in ROLE_MENUS[claimed.scope.role] for _, code in row}
         response_text = (
@@ -522,6 +563,25 @@ async def process_claimed_update(
     elif message_text == "/start" and claimed.scope.role == "customer":
         response_text = CUSTOMER_MESSAGES[language]["choose_language"]
         menu = language_menu()
+    elif claimed.scope.role == "receptionist" and message_text not in {None, "/start"}:
+        assert claimed.scope.business_id is not None
+        assert claimed.scope.shop_id is not None
+        assert actor.actor_id is not None
+        try:
+            cash_response = await handle_reception_cash_input(
+                pool,
+                bot_id=claimed.scope.bot_id,
+                business_id=claimed.scope.business_id,
+                shop_id=claimed.scope.shop_id,
+                actor_id=actor.actor_id,
+                telegram_user_id=telegram_user_id,
+                text=message_text,
+                request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
+            )
+            response_text = cash_response.text
+            menu = cash_response.keyboard or _keyboard_for("receptionist")
+        except ReceptionCashExpiredError:
+            response_text = TRANSLATIONS[language]["expired"]
     elif claimed.scope.role != "customer":
         response_text = TRANSLATIONS[language]["welcome"]
     else:

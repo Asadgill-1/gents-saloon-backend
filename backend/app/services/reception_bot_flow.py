@@ -40,7 +40,7 @@ def _keyboard(rows: tuple[tuple[tuple[str, str], ...], ...]) -> InlineKeyboardMa
     )
 
 
-async def _require_receptionist(
+async def require_receptionist(
     connection: Any,
     *,
     actor_id: UUID,
@@ -178,7 +178,7 @@ def _action_keyboard(status: str) -> InlineKeyboardMarkup:
             ("No-show", "recnoshow"),
             ("Cancel", "reccancel"),
         ),
-        "in_service": (("Continue to checkout", "r04"),),
+        "in_service": (("Complete service", "reccomplete"),),
     }
     return _keyboard((actions.get(status, ()), (("Refresh list", "recrefresh"),)))
 
@@ -229,7 +229,7 @@ async def handle_reception_callback(
     action = callback[3:]
     transition: tuple[UUID, str, str] | None = None
     async with pool.connection(timeout=5) as connection, connection.transaction():
-        await _require_receptionist(
+        await require_receptionist(
             connection,
             actor_id=actor_id,
             business_id=business_id,
@@ -294,6 +294,7 @@ async def handle_reception_callback(
             "recconfirm": ("confirmed", "reception confirmed"),
             "recreject": ("cancelled", "reception rejected request"),
             "recstart": ("in_service", "service started"),
+            "reccomplete": ("completed", "service completed"),
             "recnoshow": ("no_show", "customer no-show"),
             "reccancel": ("cancelled", "reception cancelled"),
         }
@@ -315,14 +316,17 @@ async def handle_reception_callback(
         request_id=request_id,
         payload=BookingTransitionRequest(reason=reason),
     )
-    return ReceptionFlowResponse(
-        text=f"Booking {result.status}.",
-        keyboard=_keyboard(((("Refresh list", "recrefresh"),),)),
+    keyboard = (
+        _keyboard(((("Continue to checkout", "r04"),),))
+        if result.status == "completed"
+        else _keyboard(((("Refresh list", "recrefresh"),),))
     )
+    return ReceptionFlowResponse(text=f"Booking {result.status}.", keyboard=keyboard)
 
 
 __all__ = [
     "ReceptionFlowResponse",
     "ReceptionMenuExpiredError",
     "handle_reception_callback",
+    "require_receptionist",
 ]

@@ -35,7 +35,7 @@ All three repositories have recovery work on `codex/full-recovery`. The remote `
 - shop dashboard: `2ae5729`;
 - platform dashboard: `7c08910`.
 
-Phase 2 reports/e-invoice work is locally verified and committed on the recovery branch. Phase 3 now has a secure webhook/authorization/outbox/AI-containment foundation, durable multilingual customer booking callbacks, receptionist booking lifecycle actions, and transactionally reauthorized AI tools, but not the remaining staff/owner/master canonical flows or audit. Phase 4/5 now use real SSR authentication, backend reads/actions, pagination, and nonce CSP while retaining the visual styling; their remaining feature and E2E/audit gates are listed below.
+Phase 2 reports/e-invoice work is locally verified and committed on the recovery branch. Phase 3 now has a secure webhook/authorization/outbox/AI-containment foundation, durable multilingual customer booking callbacks, receptionist booking lifecycle actions, receptionist cash-shift/EOD operations, and transactionally reauthorized AI tools, but not the remaining staff/owner/master canonical flows or audit. Phase 4/5 now use real SSR authentication, backend reads/actions, pagination, and nonce CSP while retaining the visual styling; their remaining feature and E2E/audit gates are listed below.
 
 The local Phase 1/2 migration chain reconstructs successfully through `supabase/migrations/20260726122713_reports_einvoice_boundary.sql`. Fresh remote checksum reconciliation is open because this checkout is not currently linked to a Supabase project.
 
@@ -46,7 +46,7 @@ The local Phase 1/2 migration chain reconstructs successfully through `supabase/
 | Phase 0 — foundation | **Implementation and CI verified; owner gates open** | Credential rotation and GitHub repository-protection evidence remain |
 | Phase 1 — tenant and SaaS platform | **Implementation complete; audit open** | T1.0–T1.6 locally verified; T1.7 cannot pass yet |
 | Phase 2 — booking, POS, and money | **Implementation and security audit verified** | T2.0–T2.8 complete; dated Phase 2 security audit green |
-| Phase 3 — Telegram and AI | **Customer and reception booking flows built; incomplete** | Complete reception operations plus barber/owner/master callbacks, multilingual snapshots, 201-bot/live staging proof, adversarial matrix, and dated audit remain |
+| Phase 3 — Telegram and AI | **Customer and core reception flows built; incomplete** | Reception walk-in/checkout and owner-authorized advance handoff plus barber/owner/master callbacks, multilingual snapshots, 201-bot/live staging proof, adversarial matrix, and dated audit remain |
 | Phase 4 — shop dashboard | **Core operational slice built; incomplete** | Finish appointment/POS/receipt/owner/team/money flows, Playwright/axe/staging proof, and dated audit |
 | Phase 5 — platform dashboard | **Core operational slice built; incomplete** | Finish export/download/detail/security/backup/escalation flows, Playwright/axe/staging proof, and dated audit |
 | Phase 6 — production rollout | **Local baseline built; rollout not started** | Production image/Compose/release/rollback/telemetry/backup tooling and runbooks are implemented; VPS, isolated services, drills, audits, UAT, canaries, variance, cutover, and hypercare require owner-controlled execution |
@@ -350,7 +350,7 @@ Windows no longer exposes PID 11696 through `Get-Process`, CIM, or `tasklist`, s
 
 ## 7. Exact next starting point
 
-1. Complete receptionist walk-in/checkout/cash/advance/EOD callbacks, then replace the barber/owner/master placeholders; customer, receptionist booking lifecycle, and AI booking mutations already use idempotent domain services.
+1. Complete receptionist walk-in/checkout callbacks and the owner-authorized advance handoff, then replace the barber/owner/master placeholders; customer booking, receptionist booking/cash-shift/EOD, and AI booking mutations already use database-derived or idempotent domain services.
 2. Complete multilingual menu/snapshot coverage, role/adversarial/retry tests, 201-bot capacity, Telegram/Moonshot staging proof, and the dated Phase 3 security audit.
 3. Finish Phase 4/5 feature gaps and Playwright/axe matrices, then write their dated security audits.
 4. Validate the Phase 6 image/Compose on a Linux Docker host, then execute the owner-controlled isolated-environment, PITR/S3/Grafana, security/load/UAT/canary/rollback/variance/cutover gates in the production runbook.

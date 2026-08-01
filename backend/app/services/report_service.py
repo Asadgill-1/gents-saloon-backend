@@ -1,7 +1,8 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict
 
@@ -729,6 +730,72 @@ async def get_shop_report(
     )
 
 
+async def get_reception_eod_report(
+    pool: Any,
+    *,
+    actor_id: UUID,
+    business_id: UUID,
+    shop_id: UUID,
+    at: datetime | None = None,
+) -> ShopReportResponse:
+    checked_at = at or datetime.now(UTC)
+    async with pool.connection(timeout=5) as connection, connection.transaction():
+        await connection.execute("set transaction isolation level repeatable read")
+        await connection.execute("set local statement_timeout = '10s'")
+        cursor = await connection.execute(
+            """
+            select sh.timezone
+            from public.user_profiles up
+            join public.shop_memberships sm
+              on sm.auth_user_id = up.auth_user_id and sm.active
+             and sm.role in ('manager', 'receptionist')
+            join public.shops sh
+              on sh.id = sm.shop_id and sh.business_id = sm.business_id
+             and sh.status = 'active'
+            join public.businesses b on b.id = sh.business_id and b.status = 'active'
+            where up.auth_user_id = %s and up.active
+              and sm.business_id = %s and sm.shop_id = %s
+            """,
+            (actor_id, business_id, shop_id),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            raise ReportAccessDeniedError
+        entitlement = await resolve_entitlement(
+            connection,
+            business_id=business_id,
+            shop_id=shop_id,
+            at=checked_at,
+        )
+        if not entitlement.active:
+            raise SubscriptionSuspendedError
+        try:
+            shop_timezone = ZoneInfo(str(row[0]))
+        except ZoneInfoNotFoundError as exc:
+            raise ReportInputError("shop timezone is invalid") from exc
+        local_day = checked_at.astimezone(shop_timezone).date()
+        period_start = datetime.combine(local_day, time.min, tzinfo=shop_timezone).astimezone(UTC)
+        period_end = datetime.combine(
+            local_day + timedelta(days=1), time.min, tzinfo=shop_timezone
+        ).astimezone(UTC)
+        totals = await _report_totals(
+            connection,
+            business_id=business_id,
+            shop_ids=[shop_id],
+            period_start=period_start,
+            period_end=period_end,
+        )
+    return ShopReportResponse(
+        business_id=business_id,
+        shop_id=shop_id,
+        period_start=period_start,
+        period_end=period_end,
+        totals=totals,
+        barbers=[],
+        next_cursor=None,
+    )
+
+
 async def get_business_overview(
     pool: Any,
     *,
@@ -780,5 +847,6 @@ __all__ = [
     "ReportInputError",
     "ShopReportResponse",
     "get_business_overview",
+    "get_reception_eod_report",
     "get_shop_report",
 ]
