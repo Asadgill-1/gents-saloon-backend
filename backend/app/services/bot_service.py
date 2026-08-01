@@ -18,6 +18,10 @@ from app.services.customer_bot_flow import (
     handle_customer_callback,
     language_menu,
 )
+from app.services.reception_bot_flow import (
+    ReceptionMenuExpiredError,
+    handle_reception_callback,
+)
 
 UPDATE_FLOOD_SCRIPT = """
 local current = redis.call('INCR', KEYS[1])
@@ -485,6 +489,29 @@ async def process_claimed_update(
             menu = flow_response.keyboard
         except CustomerMenuExpiredError:
             response_text = CUSTOMER_MESSAGES[language]["expired"]
+    elif (
+        callback is not None
+        and claimed.scope.role == "receptionist"
+        and (callback in {"v1.r01", "v1.r02"} or callback.startswith("v1.rec"))
+    ):
+        assert claimed.scope.business_id is not None
+        assert claimed.scope.shop_id is not None
+        assert actor.actor_id is not None
+        try:
+            reception_response = await handle_reception_callback(
+                pool,
+                bot_id=claimed.scope.bot_id,
+                business_id=claimed.scope.business_id,
+                shop_id=claimed.scope.shop_id,
+                actor_id=actor.actor_id,
+                telegram_user_id=telegram_user_id,
+                callback=callback,
+                request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
+            )
+            response_text = reception_response.text
+            menu = reception_response.keyboard or _keyboard_for("receptionist")
+        except ReceptionMenuExpiredError:
+            response_text = TRANSLATIONS[language]["expired"]
     elif callback is not None:
         allowed = {callback_data(code) for row in ROLE_MENUS[claimed.scope.role] for _, code in row}
         response_text = (
