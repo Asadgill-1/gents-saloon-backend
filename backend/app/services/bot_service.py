@@ -19,6 +19,10 @@ from app.services.customer_bot_flow import (
     handle_customer_callback,
     language_menu,
 )
+from app.services.master_bot_flow import (
+    MasterMenuExpiredError,
+    handle_master_callback,
+)
 from app.services.owner_bot_flow import (
     OwnerMenuExpiredError,
     handle_owner_callback,
@@ -646,6 +650,19 @@ async def process_claimed_update(
             response_text = owner_response.text
             menu = owner_response.keyboard or _keyboard_for("owner")
         except OwnerMenuExpiredError:
+            response_text = TRANSLATIONS[language]["expired"]
+    elif callback is not None and claimed.scope.role == "master":
+        assert actor.actor_id is not None
+        try:
+            master_response = await handle_master_callback(
+                pool,
+                actor_id=actor.actor_id,
+                telegram_user_id=telegram_user_id,
+                callback=callback,
+            )
+            response_text = master_response.text
+            menu = _keyboard_for("master")
+        except MasterMenuExpiredError:
             response_text = TRANSLATIONS[language]["expired"]
     elif callback is not None:
         allowed = {callback_data(code) for row in ROLE_MENUS[claimed.scope.role] for _, code in row}
