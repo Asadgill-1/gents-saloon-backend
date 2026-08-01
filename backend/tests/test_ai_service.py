@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -9,7 +10,7 @@ from app.services.ai_service import (
     enforce_ai_budgets,
     handle_ai_customer_chat,
 )
-from app.services.ai_tools import ToolResult, parse_tool_arguments
+from app.services.ai_tools import ToolResult, execute_allowlisted_tool, parse_tool_arguments
 
 
 def test_guardrails_prompt_injection() -> None:
@@ -132,3 +133,54 @@ async def test_raw_model_text_cannot_replace_authoritative_tool_result(monkeypat
     )
     assert response == "Haircut — AED 50.00"
     assert "AED 1" not in response
+
+
+@pytest.mark.asyncio
+async def test_booking_tool_uses_server_scope_and_idempotency(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def allow_identity(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    async def capture_booking(*_args: object, **kwargs: object) -> object:
+        captured.update(kwargs)
+        return SimpleNamespace(
+            status="requested",
+            queue_number=12,
+            hold_expires_at=None,
+            model_dump=lambda **_kwargs: {
+                "booking_id": "40000000-0000-0000-0000-000000000001",
+                "status": "requested",
+                "queue_number": 12,
+            },
+        )
+
+    monkeypatch.setattr(
+        "app.services.ai_tools._require_customer_identity",
+        allow_identity,
+    )
+    monkeypatch.setattr("app.services.ai_tools.create_booking", capture_booking)
+    arguments = parse_tool_arguments(
+        "create_booking",
+        """{
+          "service_ids":["50000000-0000-0000-0000-000000000001"],
+          "booking_type":"queue",
+          "barber_preference":"any",
+          "request_key":"model-cannot-control-this-key"
+        }""",
+    )
+    result = await execute_allowlisted_tool(
+        pool=None,
+        tool_name="create_booking",
+        arguments=arguments,
+        business_id=UUID("10000000-0000-0000-0000-000000000001"),
+        shop_id=UUID("20000000-0000-0000-0000-000000000001"),
+        customer_id=UUID("30000000-0000-0000-0000-000000000001"),
+        telegram_user_id=999001,
+        request_id="telegram:bot:update-77",
+    )
+    assert result.result_type == "booking"
+    assert result.data["status"] == "requested"
+    assert captured["actor_id"] is None
+    assert captured["telegram_user_id"] == 999001
+    assert captured["idempotency_key"] != "model-cannot-control-this-key"

@@ -92,8 +92,8 @@ Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the
 | BOT-03 | All required flows have button paths; AI outage degrades to buttons | Role menus/fallback built; callback operations and Bot E2E open | partial |
 | BOT-04 | Staff bot authorization resolves bot → shop → active membership on every update | Database-truth authorization and private-chat tests | built |
 | BOT-05 | Outbox makes notifications retryable without duplicates | Claim/accept/retry/dead-letter implementation and tests; live Telegram proof open | built |
-| AI-01 | AI only extracts intent and invokes allowlisted customer/booking tools | Strict tool contract built; real booking mutations open | partial |
-| AI-02 | Tenant/customer context is injected server-side; model cannot choose IDs | Foreign-ID schema rejection test | built |
+| AI-01 | AI only extracts intent and invokes allowlisted customer/booking tools | Strict tool contract plus transactional slot/create/cancel/reschedule integration tests; full adversarial matrix open | built |
+| AI-02 | Tenant/customer context is injected server-side; model cannot choose IDs | Foreign-ID schema rejection and trusted update-derived idempotency tests | built |
 | AI-03 | Guardrail runs before model; unsafe input produces canned response and escalation | Injection/link/PAN/size fixtures and fail-closed budgets built; complete escalation flow open | partial |
 | AI-04 | Price, wait, position, availability, and booking confirmations come only from tool results | Authoritative rendering fixture built; complete fact/hallucination set open | partial |
 

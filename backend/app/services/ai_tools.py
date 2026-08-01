@@ -1,10 +1,23 @@
+import hashlib
 import json
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
+from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+
+from app.services.booking_service import (
+    BookingCreateRequest,
+    BookingRescheduleRequest,
+    BookingTransitionRequest,
+    create_booking,
+    find_customer_appointment_slots,
+    reschedule_booking,
+    transition_booking,
+)
+from app.services.platform_operations import complete_idempotency, reserve_idempotency
 
 
 class ToolArguments(BaseModel):
@@ -237,6 +250,148 @@ async def _my_booking(
     return ToolResult(result_type="my_booking", rendered=rendered, data=data)
 
 
+async def _require_customer_identity(
+    pool: Any,
+    *,
+    business_id: UUID,
+    shop_id: UUID,
+    customer_id: UUID,
+    telegram_user_id: int,
+) -> None:
+    async with pool.connection(timeout=5) as connection:
+        cursor = await connection.execute(
+            """
+            select 1
+            from public.customers c
+            where c.id = %s
+              and c.business_id = %s
+              and c.shop_id = %s
+              and c.telegram_user_id = %s
+              and c.blocked_at is null
+              and c.anonymized_at is null
+              and not exists (
+                select 1
+                from public.telegram_user_blocks tub
+                where tub.telegram_user_id = c.telegram_user_id
+                  and (tub.expires_at is null or tub.expires_at > now())
+              )
+            """,
+            (customer_id, business_id, shop_id, telegram_user_id),
+        )
+        if await cursor.fetchone() is None:
+            raise ValueError("customer_identity_invalid")
+
+
+def _server_request_key(request_id: str) -> str:
+    return f"ai:{hashlib.sha256(request_id.encode()).hexdigest()}"
+
+
+def _render_booking_result(result: Any) -> ToolResult:
+    data = result.model_dump(mode="json")
+    if result.status == "held":
+        rendered = (
+            f"Appointment held until {result.hold_expires_at.isoformat()}. "
+            "Confirm it from the secure booking menu before it expires."
+        )
+    elif result.status == "requested":
+        rendered = "Your queue booking request was sent to reception."
+        if result.queue_number is not None:
+            rendered += f" Your provisional queue token is {result.queue_number}."
+    elif result.status == "cancelled":
+        rendered = "Your booking was cancelled."
+    else:
+        rendered = f"Your booking status is {result.status}."
+    return ToolResult(result_type="booking", rendered=rendered, data=data)
+
+
+async def _create_escalation(
+    pool: Any,
+    *,
+    business_id: UUID,
+    shop_id: UUID,
+    customer_id: UUID,
+    telegram_user_id: int,
+    category: str,
+    request_id: str,
+) -> ToolResult:
+    result = ToolResult(
+        result_type="escalation",
+        rendered="Reception has been notified with a sanitized help request.",
+        data={"category": category, "status": "created"},
+    )
+    key = _server_request_key(request_id)
+    async with pool.connection(timeout=5) as connection, connection.transaction():
+        cursor = await connection.execute(
+            """
+            select 1
+            from public.customers c
+            where c.id = %s and c.business_id = %s and c.shop_id = %s
+              and c.telegram_user_id = %s and c.blocked_at is null
+              and c.anonymized_at is null
+              and not exists (
+                select 1
+                from public.telegram_user_blocks tub
+                where tub.telegram_user_id = c.telegram_user_id
+                  and (tub.expires_at is null or tub.expires_at > now())
+              )
+            for share of c
+            """,
+            (customer_id, business_id, shop_id, telegram_user_id),
+        )
+        if await cursor.fetchone() is None:
+            raise ValueError("customer_identity_invalid")
+        replay = await reserve_idempotency(
+            connection,
+            scope=f"telegram.escalation:{shop_id}",
+            actor_id=customer_id,
+            key=key,
+            payload=EscalationArguments(category=category),
+            expected_status=201,
+        )
+        if replay is not None:
+            return ToolResult.model_validate(replay)
+        await connection.execute(
+            """
+            insert into public.audit_log (
+              business_id, shop_id, actor_type, actor_id, action,
+              entity_type, entity_id, request_id, after
+            ) values (%s, %s, 'telegram_user', %s, 'telegram.escalation.created',
+                      'customer', %s, %s, %s)
+            """,
+            (
+                business_id,
+                shop_id,
+                str(telegram_user_id),
+                customer_id,
+                request_id,
+                Jsonb(result.data),
+            ),
+        )
+        await connection.execute(
+            """
+            insert into public.outbox_events (
+              business_id, shop_id, topic, dedupe_key, payload
+            ) values (%s, %s, 'telegram.escalation', %s, %s)
+            on conflict (dedupe_key) do nothing
+            """,
+            (
+                business_id,
+                shop_id,
+                f"telegram.escalation:{key}",
+                Jsonb({"customer_id": str(customer_id), "category": category}),
+            ),
+        )
+        await complete_idempotency(
+            connection,
+            scope=f"telegram.escalation:{shop_id}",
+            actor_id=customer_id,
+            key=key,
+            response_status=201,
+            response=result,
+        )
+    return result
+
+
 async def execute_allowlisted_tool(
     pool: Any,
     tool_name: str,
@@ -245,7 +400,16 @@ async def execute_allowlisted_tool(
     business_id: UUID,
     shop_id: UUID,
     customer_id: UUID,
+    telegram_user_id: int,
+    request_id: str,
 ) -> ToolResult:
+    await _require_customer_identity(
+        pool,
+        business_id=business_id,
+        shop_id=shop_id,
+        customer_id=customer_id,
+        telegram_user_id=telegram_user_id,
+    )
     if tool_name == "list_services" and isinstance(arguments, EmptyArguments):
         return await _list_services(pool, business_id, shop_id)
     if tool_name == "get_shop_hours" and isinstance(arguments, ShopHoursArguments):
@@ -254,16 +418,85 @@ async def execute_allowlisted_tool(
         return await _live_queue(pool, business_id, shop_id)
     if tool_name == "get_my_booking" and isinstance(arguments, EmptyArguments):
         return await _my_booking(pool, business_id, shop_id, customer_id)
-    if tool_name in {
-        "find_appointment_slots",
-        "create_booking",
-        "cancel_my_booking",
-        "reschedule_my_booking",
-        "escalate_to_management",
-    }:
-        return ToolResult(
-            result_type="button_required",
-            rendered="Please use the secure menu button to continue this action.",
+    if tool_name == "find_appointment_slots" and isinstance(arguments, AppointmentSlotArguments):
+        slots = await find_customer_appointment_slots(
+            pool,
+            business_id=business_id,
+            shop_id=shop_id,
+            customer_id=customer_id,
+            telegram_user_id=telegram_user_id,
+            service_ids=arguments.service_ids,
+            day=arguments.day,
+            barber_membership_id=(
+                None if arguments.barber_preference == "any" else arguments.barber_preference
+            ),
+        )
+        data = [slot.model_dump(mode="json") for slot in slots]
+        rendered = (
+            "Available appointment starts:\n"
+            + "\n".join(f"• {slot.starts_at.isoformat()}" for slot in slots)
+            if slots
+            else "No appointment slots are currently available for that day."
+        )
+        return ToolResult(result_type="appointment_slots", rendered=rendered, data={"items": data})
+    if tool_name == "create_booking" and isinstance(arguments, CreateBookingArguments):
+        result = await create_booking(
+            pool,
+            actor_id=None,
+            business_id=business_id,
+            shop_id=shop_id,
+            idempotency_key=_server_request_key(request_id),
+            request_id=request_id,
+            payload=BookingCreateRequest(
+                booking_type=arguments.booking_type,
+                customer_id=customer_id,
+                barber_membership_id=(
+                    None if arguments.barber_preference == "any" else arguments.barber_preference
+                ),
+                service_ids=arguments.service_ids,
+                scheduled_start=arguments.slot_start,
+            ),
+            telegram_user_id=telegram_user_id,
+        )
+        return _render_booking_result(result)
+    if tool_name == "cancel_my_booking" and isinstance(arguments, BookingIdArguments):
+        result = await transition_booking(
+            pool,
+            actor_id=None,
+            business_id=business_id,
+            shop_id=shop_id,
+            booking_id=arguments.booking_id,
+            target_status="cancelled",
+            idempotency_key=_server_request_key(request_id),
+            request_id=request_id,
+            payload=BookingTransitionRequest(reason=arguments.reason or "customer requested"),
+            customer_id=customer_id,
+            telegram_user_id=telegram_user_id,
+        )
+        return _render_booking_result(result)
+    if tool_name == "reschedule_my_booking" and isinstance(arguments, RescheduleArguments):
+        result = await reschedule_booking(
+            pool,
+            actor_id=None,
+            business_id=business_id,
+            shop_id=shop_id,
+            booking_id=arguments.booking_id,
+            idempotency_key=_server_request_key(request_id),
+            request_id=request_id,
+            payload=BookingRescheduleRequest(scheduled_start=arguments.slot_start),
+            customer_id=customer_id,
+            telegram_user_id=telegram_user_id,
+        )
+        return _render_booking_result(result)
+    if tool_name == "escalate_to_management" and isinstance(arguments, EscalationArguments):
+        return await _create_escalation(
+            pool,
+            business_id=business_id,
+            shop_id=shop_id,
+            customer_id=customer_id,
+            telegram_user_id=telegram_user_id,
+            category=arguments.category,
+            request_id=request_id,
         )
     raise ValueError("unsupported_tool")
 

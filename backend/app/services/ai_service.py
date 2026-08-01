@@ -2,7 +2,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.core.ai_client import MoonshotAIClient
 from app.core.guardrails import GuardrailViolation, validate_and_sanitize_input
@@ -106,6 +106,7 @@ async def handle_ai_customer_chat(
     shop_id: UUID,
     customer_id: UUID | None,
     telegram_user_id: int | None = None,
+    request_id: str | None = None,
     redis: Any = None,
     hourly_budget: int = 20,
     daily_budget: int = 5000,
@@ -156,7 +157,8 @@ async def handle_ai_customer_chat(
     ]
     authoritative: list[str] = []
     used_tools: list[str] = []
-    for _round in range(3):
+    effective_request_id = request_id or f"ai:{uuid4()}"
+    for tool_round in range(3):
         try:
             response = await ai_client.chat_completion(messages, tools=ALLOWLISTED_TOOLS)
             choice = response["choices"][0]["message"]
@@ -166,7 +168,7 @@ async def handle_ai_customer_chat(
         if not isinstance(tool_calls, list) or not tool_calls:
             break
         messages.append({"role": "assistant", "content": None, "tool_calls": tool_calls})
-        for tool_call in tool_calls:
+        for tool_index, tool_call in enumerate(tool_calls):
             try:
                 tool_name = str(tool_call["function"]["name"])
                 raw_arguments = str(tool_call["function"].get("arguments", "{}"))
@@ -178,6 +180,8 @@ async def handle_ai_customer_chat(
                     business_id=business_id,
                     shop_id=shop_id,
                     customer_id=customer_id,
+                    telegram_user_id=telegram_user_id,
+                    request_id=f"{effective_request_id}:{tool_round}:{tool_index}",
                 )
             except Exception:
                 return AI_FALLBACK

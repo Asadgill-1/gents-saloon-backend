@@ -15,6 +15,7 @@ from app.services.booking_service import (
     BookingTransitionRequest,
     create_booking,
     expire_booking_holds,
+    find_customer_appointment_slots,
     promote_due_appointments,
     reschedule_booking,
     transition_booking,
@@ -33,6 +34,7 @@ CUSTOMER_ID = UUID("51000000-0000-0000-0000-000000000001")
 SERVICE_ID = UUID("50000000-0000-0000-0000-000000000001")
 SECOND_BARBER_ID = UUID("59000000-0000-0000-0000-000000000001")
 BASE_AT = datetime(2026, 7, 27, 5, 0, tzinfo=UTC)
+CUSTOMER_TELEGRAM_ID = 7000000001
 
 
 async def _prepare_second_barber(pool: object) -> list[UUID]:
@@ -355,5 +357,98 @@ async def test_booking_hold_queue_concurrency_workers_and_redis_independence() -
             assert evidence[0] == evidence[1]
             assert evidence[2] == 1
             assert evidence[3] is not None
+    finally:
+        await pool.close()
+
+
+async def test_telegram_customer_booking_reauthorizes_inside_transaction() -> None:
+    pool = create_database_pool(Settings(_env_file=None))
+    await pool.open()
+    try:
+        payload = BookingCreateRequest(
+            booking_type="queue",
+            customer_id=CUSTOMER_ID,
+            service_ids=[SERVICE_ID],
+        )
+        created = await create_booking(
+            pool,
+            actor_id=None,
+            business_id=BUSINESS_ID,
+            shop_id=SHOP_ID,
+            idempotency_key="telegram-customer-create-0001",
+            request_id="telegram-customer-create",
+            payload=payload,
+            telegram_user_id=CUSTOMER_TELEGRAM_ID,
+            at=BASE_AT + timedelta(minutes=30),
+        )
+        replayed = await create_booking(
+            pool,
+            actor_id=None,
+            business_id=BUSINESS_ID,
+            shop_id=SHOP_ID,
+            idempotency_key="telegram-customer-create-0001",
+            request_id="telegram-customer-create-replay",
+            payload=payload,
+            telegram_user_id=CUSTOMER_TELEGRAM_ID,
+            at=BASE_AT + timedelta(minutes=30),
+        )
+        assert created == replayed
+        assert created.status == "requested"
+        assert created.customer_id == CUSTOMER_ID
+
+        slots = await find_customer_appointment_slots(
+            pool,
+            business_id=BUSINESS_ID,
+            shop_id=SHOP_ID,
+            customer_id=CUSTOMER_ID,
+            telegram_user_id=CUSTOMER_TELEGRAM_ID,
+            service_ids=[SERVICE_ID],
+            day=BASE_AT.date(),
+            at=BASE_AT + timedelta(minutes=30),
+        )
+        assert slots
+
+        cancelled = await transition_booking(
+            pool,
+            actor_id=None,
+            business_id=BUSINESS_ID,
+            shop_id=SHOP_ID,
+            booking_id=created.booking_id,
+            target_status="cancelled",
+            idempotency_key="telegram-customer-cancel-0002",
+            request_id="telegram-customer-cancel",
+            payload=BookingTransitionRequest(reason="customer requested"),
+            customer_id=CUSTOMER_ID,
+            telegram_user_id=CUSTOMER_TELEGRAM_ID,
+            at=BASE_AT + timedelta(minutes=31),
+        )
+        assert cancelled.status == "cancelled"
+
+        with pytest.raises(BookingAccessDeniedError):
+            await create_booking(
+                pool,
+                actor_id=None,
+                business_id=BUSINESS_ID,
+                shop_id=SHOP_ID,
+                idempotency_key="telegram-foreign-identity-0003",
+                request_id="telegram-foreign-identity",
+                payload=payload,
+                telegram_user_id=7999999998,
+                at=BASE_AT + timedelta(minutes=32),
+            )
+
+        async with pool.connection(timeout=5) as connection:
+            cursor = await connection.execute(
+                """
+                select b.source::text, a.actor_type::text, a.actor_id
+                from public.bookings b
+                join public.audit_log a
+                  on a.entity_id = b.id and a.action = 'booking.created'
+                where b.id = %s
+                """,
+                (created.booking_id,),
+            )
+            evidence = await cursor.fetchone()
+            assert evidence == ("telegram", "telegram_user", str(CUSTOMER_TELEGRAM_ID))
     finally:
         await pool.close()

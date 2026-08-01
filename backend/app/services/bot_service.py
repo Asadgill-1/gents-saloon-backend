@@ -475,6 +475,7 @@ async def process_claimed_update(
             shop_id=claimed.scope.shop_id,
             customer_id=actor.customer_id,
             telegram_user_id=telegram_user_id,
+            request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
             redis=redis,
             hourly_budget=ai_hourly_budget,
             daily_budget=ai_daily_budget,
