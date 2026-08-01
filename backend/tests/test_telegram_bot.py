@@ -13,6 +13,13 @@ from app.core.telegram import (
     verify_telegram_webhook_secret,
 )
 from app.services.bot_service import ROLE_MENUS, TRANSLATIONS
+from app.services.customer_bot_flow import (
+    BUTTONS,
+    MENU_LABELS,
+    MESSAGES,
+    customer_menu,
+    language_menu,
+)
 
 BOT_ID = UUID("60000000-0000-0000-0000-000000000001")
 BUSINESS_ID = UUID("10000000-0000-0000-0000-000000000001")
@@ -86,3 +93,13 @@ def test_role_menus_and_customer_locales_are_complete() -> None:
                 assert callback_data(action).startswith("v1.")
     for language in ("en", "ar", "hi", "ur"):
         assert set(TRANSLATIONS[language]) == {"welcome", "unavailable", "expired"}
+        assert set(MESSAGES[language]) == set(MESSAGES["en"])
+        assert set(BUTTONS[language]) == set(BUTTONS["en"])
+        assert MENU_LABELS[language]
+        menu = customer_menu(language)
+        assert all(
+            (button.callback_data or "").startswith("v1.")
+            for row in menu.inline_keyboard
+            for button in row
+        )
+    assert len(language_menu().inline_keyboard) == 2

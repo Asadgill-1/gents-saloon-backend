@@ -11,6 +11,13 @@ from psycopg.types.json import Jsonb
 from app.core.entitlements import resolve_entitlement
 from app.core.telegram import callback_data, decrypt_envelope, update_associated_data
 from app.services.ai_service import handle_ai_customer_chat
+from app.services.customer_bot_flow import MESSAGES as CUSTOMER_MESSAGES
+from app.services.customer_bot_flow import (
+    CustomerMenuExpiredError,
+    customer_menu,
+    handle_customer_callback,
+    language_menu,
+)
 
 UPDATE_FLOOD_SCRIPT = """
 local current = redis.call('INCR', KEYS[1])
@@ -453,16 +460,42 @@ async def process_claimed_update(
                 return
 
     callback = update.callback_query.data if update.callback_query is not None else None
-    menu = _keyboard_for(claimed.scope.role)
     language = actor.language if claimed.scope.role == "customer" else "en"
-    if callback is not None:
+    menu: InlineKeyboardMarkup | None = (
+        customer_menu(language)
+        if claimed.scope.role == "customer"
+        else _keyboard_for(claimed.scope.role)
+    )
+    if callback is not None and claimed.scope.role == "customer":
+        assert claimed.scope.business_id is not None
+        assert claimed.scope.shop_id is not None
+        assert actor.customer_id is not None
+        try:
+            flow_response = await handle_customer_callback(
+                pool,
+                bot_id=claimed.scope.bot_id,
+                business_id=claimed.scope.business_id,
+                shop_id=claimed.scope.shop_id,
+                customer_id=actor.customer_id,
+                telegram_user_id=telegram_user_id,
+                callback=callback,
+                request_id=f"telegram:{claimed.scope.bot_id}:{claimed.update_id}",
+            )
+            response_text = flow_response.text
+            menu = flow_response.keyboard
+        except CustomerMenuExpiredError:
+            response_text = CUSTOMER_MESSAGES[language]["expired"]
+    elif callback is not None:
         allowed = {callback_data(code) for row in ROLE_MENUS[claimed.scope.role] for _, code in row}
         response_text = (
             "Selection received. Continue with the displayed secure form."
             if callback in allowed
             else TRANSLATIONS[language]["expired"]
         )
-    elif message_text == "/start" or claimed.scope.role != "customer":
+    elif message_text == "/start" and claimed.scope.role == "customer":
+        response_text = CUSTOMER_MESSAGES[language]["choose_language"]
+        menu = language_menu()
+    elif claimed.scope.role != "customer":
         response_text = TRANSLATIONS[language]["welcome"]
     else:
         assert claimed.scope.business_id is not None

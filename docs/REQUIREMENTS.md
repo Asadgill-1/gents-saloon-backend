@@ -88,8 +88,8 @@ Statuses: `planned`, `built`, `verified`. Nothing becomes `verified` without the
 | ID | Requirement | Verification | Status |
 |---|---|---|---|
 | BOT-01 | Four bots per shop: customer, receptionist, barber crew, owner; one global master bot | Registry/scope implementation built; 201-bot capacity proof open | built |
-| BOT-02 | Customer bot supports EN/AR/HI/UR; staff/web surfaces are English in first release | Four-language system messages built; translated menus/snapshots open | partial |
-| BOT-03 | All required flows have button paths; AI outage degrades to buttons | Role menus/fallback built; callback operations and Bot E2E open | partial |
+| BOT-02 | Customer bot supports EN/AR/HI/UR; staff/web surfaces are English in first release | Four-language customer messages and menus built; snapshot matrix open | built |
+| BOT-03 | All required flows have button paths; AI outage degrades to buttons | Transactional customer callback flows built; staff/owner/master operations and full Bot E2E open | partial |
 | BOT-04 | Staff bot authorization resolves bot → shop → active membership on every update | Database-truth authorization and private-chat tests | built |
 | BOT-05 | Outbox makes notifications retryable without duplicates | Claim/accept/retry/dead-letter implementation and tests; live Telegram proof open | built |
 | AI-01 | AI only extracts intent and invokes allowlisted customer/booking tools | Strict tool contract plus transactional slot/create/cancel/reschedule integration tests; full adversarial matrix open | built |

@@ -821,7 +821,7 @@ async def transition_booking(
     at: datetime | None = None,
 ) -> BookingResponse:
     now = at or datetime.now(UTC)
-    if telegram_user_id is not None and target_status != "cancelled":
+    if telegram_user_id is not None and target_status not in {"cancelled", "confirmed"}:
         raise BookingAccessDeniedError
     idempotency_payload = payload.model_copy(update={"reason": payload.reason or target_status})
     async with pool.connection(timeout=5) as connection, connection.transaction():
